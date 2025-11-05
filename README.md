@@ -1,14 +1,19 @@
 # Helper Scripts Directory
 
+**Repository Location:** `https://github.com/mytech-today-now/scripts`
+
 This directory contains reusable helper scripts that can be included in other PowerShell scripts to provide common functionality.
+
+**Note:** The canonical version of these helper scripts is hosted in the separate `scripts` repository on GitHub. This allows scripts from any repository to load the helpers via GitHub URL.
 
 ## Purpose
 
-The `scripts/` directory serves as a centralized repository for:
+The helper scripts repository serves as a centralized location for:
 - **Utility functions** that are used across multiple scripts
 - **Helper modules** that provide specific functionality
 - **Shared code** to follow DRY (Don't Repeat Yourself) principles
 - **Standardized implementations** of common patterns
+- **Remote loading** - Scripts can load helpers from GitHub URL
 
 ## Available Helper Scripts
 
@@ -27,7 +32,7 @@ The `scripts/` directory serves as a centralized repository for:
 
 ```powershell
 # Method 1: Load from GitHub (recommended for distributed scripts)
-$responsiveUrl = 'https://raw.githubusercontent.com/mytech-today-now/PowerShellScripts/main/scripts/responsive.ps1'
+$responsiveUrl = 'https://raw.githubusercontent.com/mytech-today-now/scripts/refs/heads/main/responsive.ps1'
 Invoke-Expression (Invoke-WebRequest -Uri $responsiveUrl -UseBasicParsing).Content
 
 # Method 2: Dot-source from local path (for development)
@@ -60,7 +65,7 @@ $button = New-ResponsiveButton -Text "Click Me" -X 20 -Y 20
 
 ```powershell
 # Load the helper
-$responsiveUrl = 'https://raw.githubusercontent.com/mytech-today-now/PowerShellScripts/main/scripts/responsive.ps1'
+$responsiveUrl = 'https://raw.githubusercontent.com/mytech-today-now/scripts/refs/heads/main/responsive.ps1'
 Invoke-Expression (Invoke-WebRequest -Uri $responsiveUrl -UseBasicParsing).Content
 
 # Create a responsive form
@@ -118,7 +123,7 @@ When developing locally, you can dot-source the helper script:
 Cache the helper script locally to avoid repeated downloads:
 
 ```powershell
-$helperUrl = 'https://raw.githubusercontent.com/mytech-today-now/PowerShellScripts/main/scripts/responsive.ps1'
+$helperUrl = 'https://raw.githubusercontent.com/mytech-today-now/scripts/refs/heads/main/responsive.ps1'
 $cacheFile = Join-Path $env:TEMP 'responsive-helper.ps1'
 
 # Download if not cached or older than 1 day
@@ -136,7 +141,7 @@ if (-not (Test-Path $cacheFile) -or ((Get-Item $cacheFile).LastWriteTime -lt (Ge
 
 1. **Version Pinning:** For production scripts, consider pinning to a specific commit or tag:
    ```powershell
-   $helperUrl = 'https://raw.githubusercontent.com/mytech-today-now/PowerShellScripts/v1.0.0/scripts/responsive.ps1'
+   $helperUrl = 'https://raw.githubusercontent.com/mytech-today-now/scripts/v1.0.0/responsive.ps1'
    ```
 
 2. **Error Handling:** Always wrap helper loading in try-catch blocks:

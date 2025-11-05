@@ -990,10 +990,8 @@ if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
 
 #endregion
 
-# Export all functions for use in calling scripts
-Export-ModuleMember -Function Get-ResponsiveDPIScale, Get-ResponsiveBaseDimensions, Get-ResponsiveScaledValue, `
-    New-ResponsiveForm, New-ResponsiveLabel, New-ResponsiveTextBox, New-ResponsiveButton, `
-    New-ResponsiveCheckBox, New-ResponsiveComboBox, New-ResponsiveProgressBar, New-ResponsiveNumericUpDown
+# Note: Functions are automatically available when this script is dot-sourced or loaded via Invoke-Expression
+# No Export-ModuleMember needed (that's only for .psm1 module files)
 
 # Script loaded successfully
 Write-Verbose "Responsive GUI Helper Script loaded successfully (v1.0.0)"

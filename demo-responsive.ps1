@@ -22,7 +22,7 @@
 
 # Method 1: Load from GitHub (recommended for production)
 Write-Host "[INFO] Loading responsive GUI helper from GitHub..." -ForegroundColor Cyan
-$responsiveUrl = 'https://raw.githubusercontent.com/mytech-today-now/PowerShellScripts/main/scripts/responsive.ps1'
+$responsiveUrl = 'https://raw.githubusercontent.com/mytech-today-now/scripts/refs/heads/main/responsive.ps1'
 
 try {
     Invoke-Expression (Invoke-WebRequest -Uri $responsiveUrl -UseBasicParsing).Content
