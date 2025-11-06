@@ -209,35 +209,36 @@ function Get-ResponsiveBaseDimensions {
         MinFormWidth = 600
         MinFormHeight = 450
 
-        # Font sizes - INCREASED 2.4x for better readability
-        BaseFontSize = 24
-        MinFontSize = 20
-        TitleFontSize = 32
-        HeaderFontSize = 28
+        # Font sizes - Microsoft Professional Standards (Segoe UI 9pt)
+        BaseFontSize = 9
+        MinFontSize = 8
+        TitleFontSize = 10
+        HeaderFontSize = 9
+        LabelFontSize = 9  # Same as controls for consistency
 
-        # Margins and spacing - INCREASED for larger fonts
-        Margin = 30
-        Spacing = 20
-        SmallSpacing = 15
-        LargeSpacing = 40
+        # Margins and spacing - Microsoft Standards
+        Margin = 12
+        Spacing = 6
+        SmallSpacing = 4
+        LargeSpacing = 12
 
-        # Control dimensions - INCREASED to accommodate larger fonts
-        ControlHeight = 50
-        ButtonHeight = 60
-        ButtonWidth = 150
-        TextBoxHeight = 50
-        LabelHeight = 50
+        # Control dimensions - Microsoft Professional Standards
+        ControlHeight = 20
+        ButtonHeight = 23
+        ButtonWidth = 75
+        TextBoxHeight = 20
+        LabelHeight = 20  # Match textbox height for vertical alignment
 
-        # Layout - INCREASED for larger fonts
-        LabelWidth = 250
-        InputWidth = 350
-        TabMargin = 20
+        # Layout
+        LabelWidth = 140
+        InputWidth = 250
+        TabMargin = 8
 
-        # Specific controls - INCREASED to accommodate larger fonts
-        ProgressBarHeight = 40
-        CheckBoxHeight = 50
-        NumericUpDownHeight = 50
-        ComboBoxHeight = 50
+        # Specific controls
+        ProgressBarHeight = 16
+        CheckBoxHeight = 20
+        NumericUpDownHeight = 20
+        ComboBoxHeight = 21
     }
     
     # Merge custom dimensions with defaults
@@ -470,9 +471,9 @@ function New-ResponsiveLabel {
         $ScaleFactor = $scaleInfo.TotalScale
     }
 
-    # Get base dimensions for font sizing
+    # Get base dimensions for font sizing - Use LabelFontSize for labels
     $baseDims = Get-ResponsiveBaseDimensions
-    $fontSize = Get-ResponsiveScaledValue -BaseValue $baseDims.BaseFontSize -MinValue $baseDims.MinFontSize
+    $fontSize = Get-ResponsiveScaledValue -BaseValue $baseDims.LabelFontSize -MinValue $baseDims.MinFontSize
 
     $label = New-Object System.Windows.Forms.Label
     $label.Text = $Text
