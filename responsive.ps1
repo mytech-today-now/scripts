@@ -421,7 +421,7 @@ function New-ResponsiveForm {
 function New-ResponsiveLabel {
     <#
     .SYNOPSIS
-        Creates a responsive Label control.
+        Creates a responsive Label control with modern styling.
 
     .PARAMETER Text
         The text to display in the label.
@@ -436,13 +436,13 @@ function New-ResponsiveLabel {
         Base width (before scaling). Default: 150
 
     .PARAMETER Height
-        Base height (before scaling). Default: 20
+        Base height (before scaling). Default: 30 (increased for better text display)
 
     .PARAMETER ScaleFactor
         Optional scale factor. If not provided, uses cached value.
 
     .OUTPUTS
-        System.Windows.Forms.Label object.
+        System.Windows.Forms.Label object with modern styling applied.
     #>
     [CmdletBinding()]
     param(
@@ -459,7 +459,7 @@ function New-ResponsiveLabel {
         [int]$Width = 150,
 
         [Parameter(Mandatory = $false)]
-        [int]$Height = 20,
+        [int]$Height = 30,
 
         [Parameter(Mandatory = $false)]
         [double]$ScaleFactor
@@ -469,6 +469,10 @@ function New-ResponsiveLabel {
         $scaleInfo = Get-ResponsiveDPIScale
         $ScaleFactor = $scaleInfo.TotalScale
     }
+
+    # Get base dimensions for font sizing
+    $baseDims = Get-ResponsiveBaseDimensions
+    $fontSize = Get-ResponsiveScaledValue -BaseValue $baseDims.BaseFontSize -MinValue $baseDims.MinFontSize
 
     $label = New-Object System.Windows.Forms.Label
     $label.Text = $Text
@@ -481,6 +485,8 @@ function New-ResponsiveLabel {
         (Get-ResponsiveScaledValue -BaseValue $Height -ScaleFactor $ScaleFactor)
     )
     $label.AutoSize = $false
+    $label.Font = New-Object System.Drawing.Font("Segoe UI", $fontSize, [System.Drawing.FontStyle]::Regular)
+    $label.TextAlign = [System.Drawing.ContentAlignment]::MiddleLeft
 
     return $label
 }
@@ -488,7 +494,7 @@ function New-ResponsiveLabel {
 function New-ResponsiveTextBox {
     <#
     .SYNOPSIS
-        Creates a responsive TextBox control.
+        Creates a responsive TextBox control with modern styling.
 
     .PARAMETER X
         Base X position (before scaling).
@@ -500,7 +506,7 @@ function New-ResponsiveTextBox {
         Base width (before scaling). Default: 250
 
     .PARAMETER Height
-        Base height (before scaling). Default: 25
+        Base height (before scaling). Default: 30 (increased for better text display)
 
     .PARAMETER Text
         Initial text value.
@@ -512,7 +518,7 @@ function New-ResponsiveTextBox {
         Optional scale factor. If not provided, uses cached value.
 
     .OUTPUTS
-        System.Windows.Forms.TextBox object.
+        System.Windows.Forms.TextBox object with modern styling applied.
     #>
     [CmdletBinding()]
     param(
@@ -526,7 +532,7 @@ function New-ResponsiveTextBox {
         [int]$Width = 250,
 
         [Parameter(Mandatory = $false)]
-        [int]$Height = 25,
+        [int]$Height = 30,
 
         [Parameter(Mandatory = $false)]
         [string]$Text = '',
@@ -543,6 +549,10 @@ function New-ResponsiveTextBox {
         $ScaleFactor = $scaleInfo.TotalScale
     }
 
+    # Get base dimensions for font sizing
+    $baseDims = Get-ResponsiveBaseDimensions
+    $fontSize = Get-ResponsiveScaledValue -BaseValue $baseDims.BaseFontSize -MinValue $baseDims.MinFontSize
+
     $textBox = New-Object System.Windows.Forms.TextBox
     $textBox.Text = $Text
     $textBox.Multiline = $Multiline
@@ -554,6 +564,7 @@ function New-ResponsiveTextBox {
         (Get-ResponsiveScaledValue -BaseValue $Width -ScaleFactor $ScaleFactor),
         (Get-ResponsiveScaledValue -BaseValue $Height -ScaleFactor $ScaleFactor)
     )
+    $textBox.Font = New-Object System.Drawing.Font("Segoe UI", $fontSize, [System.Drawing.FontStyle]::Regular)
 
     return $textBox
 }
@@ -561,7 +572,7 @@ function New-ResponsiveTextBox {
 function New-ResponsiveButton {
     <#
     .SYNOPSIS
-        Creates a responsive Button control.
+        Creates a responsive Button control with modern flat styling.
 
     .PARAMETER Text
         The text to display on the button.
@@ -576,13 +587,13 @@ function New-ResponsiveButton {
         Base width (before scaling). Default: 100
 
     .PARAMETER Height
-        Base height (before scaling). Default: 35
+        Base height (before scaling). Default: 40 (increased for better text display)
 
     .PARAMETER ScaleFactor
         Optional scale factor. If not provided, uses cached value.
 
     .OUTPUTS
-        System.Windows.Forms.Button object.
+        System.Windows.Forms.Button object with modern flat styling applied.
     #>
     [CmdletBinding()]
     param(
@@ -599,7 +610,7 @@ function New-ResponsiveButton {
         [int]$Width = 100,
 
         [Parameter(Mandatory = $false)]
-        [int]$Height = 35,
+        [int]$Height = 40,
 
         [Parameter(Mandatory = $false)]
         [double]$ScaleFactor
@@ -609,6 +620,10 @@ function New-ResponsiveButton {
         $scaleInfo = Get-ResponsiveDPIScale
         $ScaleFactor = $scaleInfo.TotalScale
     }
+
+    # Get base dimensions for font sizing
+    $baseDims = Get-ResponsiveBaseDimensions
+    $fontSize = Get-ResponsiveScaledValue -BaseValue $baseDims.BaseFontSize -MinValue $baseDims.MinFontSize
 
     $button = New-Object System.Windows.Forms.Button
     $button.Text = $Text
@@ -620,6 +635,10 @@ function New-ResponsiveButton {
         (Get-ResponsiveScaledValue -BaseValue $Width -ScaleFactor $ScaleFactor),
         (Get-ResponsiveScaledValue -BaseValue $Height -ScaleFactor $ScaleFactor)
     )
+    $button.Font = New-Object System.Drawing.Font("Segoe UI", $fontSize, [System.Drawing.FontStyle]::Regular)
+    $button.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
+    $button.FlatAppearance.BorderSize = 1
+    $button.FlatAppearance.BorderColor = [System.Drawing.Color]::FromArgb(200, 200, 200)
     $button.UseVisualStyleBackColor = $true
 
     return $button
@@ -628,7 +647,7 @@ function New-ResponsiveButton {
 function New-ResponsiveCheckBox {
     <#
     .SYNOPSIS
-        Creates a responsive CheckBox control.
+        Creates a responsive CheckBox control with modern flat styling.
 
     .PARAMETER Text
         The text to display next to the checkbox.
@@ -643,7 +662,7 @@ function New-ResponsiveCheckBox {
         Base width (before scaling). Default: 200
 
     .PARAMETER Height
-        Base height (before scaling). Default: 20
+        Base height (before scaling). Default: 30 (increased for better text display)
 
     .PARAMETER Checked
         Initial checked state. Default: $false
@@ -652,7 +671,7 @@ function New-ResponsiveCheckBox {
         Optional scale factor. If not provided, uses cached value.
 
     .OUTPUTS
-        System.Windows.Forms.CheckBox object.
+        System.Windows.Forms.CheckBox object with modern flat styling applied.
     #>
     [CmdletBinding()]
     param(
@@ -669,7 +688,7 @@ function New-ResponsiveCheckBox {
         [int]$Width = 200,
 
         [Parameter(Mandatory = $false)]
-        [int]$Height = 20,
+        [int]$Height = 30,
 
         [Parameter(Mandatory = $false)]
         [bool]$Checked = $false,
@@ -683,6 +702,10 @@ function New-ResponsiveCheckBox {
         $ScaleFactor = $scaleInfo.TotalScale
     }
 
+    # Get base dimensions for font sizing
+    $baseDims = Get-ResponsiveBaseDimensions
+    $fontSize = Get-ResponsiveScaledValue -BaseValue $baseDims.BaseFontSize -MinValue $baseDims.MinFontSize
+
     $checkBox = New-Object System.Windows.Forms.CheckBox
     $checkBox.Text = $Text
     $checkBox.Checked = $Checked
@@ -694,6 +717,8 @@ function New-ResponsiveCheckBox {
         (Get-ResponsiveScaledValue -BaseValue $Width -ScaleFactor $ScaleFactor),
         (Get-ResponsiveScaledValue -BaseValue $Height -ScaleFactor $ScaleFactor)
     )
+    $checkBox.Font = New-Object System.Drawing.Font("Segoe UI", $fontSize, [System.Drawing.FontStyle]::Regular)
+    $checkBox.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
     $checkBox.UseVisualStyleBackColor = $true
 
     return $checkBox
@@ -850,7 +875,7 @@ function New-ResponsiveProgressBar {
 function New-ResponsiveNumericUpDown {
     <#
     .SYNOPSIS
-        Creates a responsive NumericUpDown control.
+        Creates a responsive NumericUpDown control with modern styling.
 
     .PARAMETER X
         Base X position (before scaling).
@@ -862,7 +887,7 @@ function New-ResponsiveNumericUpDown {
         Base width (before scaling). Default: 120
 
     .PARAMETER Height
-        Base height (before scaling). Default: 25
+        Base height (before scaling). Default: 30 (increased for better text display)
 
     .PARAMETER Minimum
         Minimum value. Default: 0
@@ -877,7 +902,7 @@ function New-ResponsiveNumericUpDown {
         Optional scale factor. If not provided, uses cached value.
 
     .OUTPUTS
-        System.Windows.Forms.NumericUpDown object.
+        System.Windows.Forms.NumericUpDown object with modern styling applied.
     #>
     [CmdletBinding()]
     param(
@@ -891,7 +916,7 @@ function New-ResponsiveNumericUpDown {
         [int]$Width = 120,
 
         [Parameter(Mandatory = $false)]
-        [int]$Height = 25,
+        [int]$Height = 30,
 
         [Parameter(Mandatory = $false)]
         [decimal]$Minimum = 0,
@@ -911,6 +936,10 @@ function New-ResponsiveNumericUpDown {
         $ScaleFactor = $scaleInfo.TotalScale
     }
 
+    # Get base dimensions for font sizing
+    $baseDims = Get-ResponsiveBaseDimensions
+    $fontSize = Get-ResponsiveScaledValue -BaseValue $baseDims.BaseFontSize -MinValue $baseDims.MinFontSize
+
     $numericUpDown = New-Object System.Windows.Forms.NumericUpDown
     $numericUpDown.Minimum = $Minimum
     $numericUpDown.Maximum = $Maximum
@@ -923,8 +952,180 @@ function New-ResponsiveNumericUpDown {
         (Get-ResponsiveScaledValue -BaseValue $Width -ScaleFactor $ScaleFactor),
         (Get-ResponsiveScaledValue -BaseValue $Height -ScaleFactor $ScaleFactor)
     )
+    $numericUpDown.Font = New-Object System.Drawing.Font("Segoe UI", $fontSize, [System.Drawing.FontStyle]::Regular)
 
     return $numericUpDown
+}
+
+function New-ResponsiveTabControl {
+    <#
+    .SYNOPSIS
+        Creates a responsive TabControl with modern styling.
+
+    .PARAMETER X
+        Base X position (before scaling).
+
+    .PARAMETER Y
+        Base Y position (before scaling).
+
+    .PARAMETER Width
+        Base width (before scaling). Default: 600
+
+    .PARAMETER Height
+        Base height (before scaling). Default: 400
+
+    .PARAMETER ScaleFactor
+        Optional scale factor. If not provided, uses cached value.
+
+    .OUTPUTS
+        System.Windows.Forms.TabControl object with modern styling applied.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [int]$X,
+
+        [Parameter(Mandatory = $true)]
+        [int]$Y,
+
+        [Parameter(Mandatory = $false)]
+        [int]$Width = 600,
+
+        [Parameter(Mandatory = $false)]
+        [int]$Height = 400,
+
+        [Parameter(Mandatory = $false)]
+        [double]$ScaleFactor
+    )
+
+    if (-not $ScaleFactor) {
+        $scaleInfo = Get-ResponsiveDPIScale
+        $ScaleFactor = $scaleInfo.TotalScale
+    }
+
+    # Get base dimensions for font sizing
+    $baseDims = Get-ResponsiveBaseDimensions
+    $fontSize = Get-ResponsiveScaledValue -BaseValue $baseDims.BaseFontSize -MinValue $baseDims.MinFontSize
+
+    $tabControl = New-Object System.Windows.Forms.TabControl
+    $tabControl.Location = New-Object System.Drawing.Point(
+        (Get-ResponsiveScaledValue -BaseValue $X -ScaleFactor $ScaleFactor),
+        (Get-ResponsiveScaledValue -BaseValue $Y -ScaleFactor $ScaleFactor)
+    )
+    $tabControl.Size = New-Object System.Drawing.Size(
+        (Get-ResponsiveScaledValue -BaseValue $Width -ScaleFactor $ScaleFactor),
+        (Get-ResponsiveScaledValue -BaseValue $Height -ScaleFactor $ScaleFactor)
+    )
+    $tabControl.Font = New-Object System.Drawing.Font("Segoe UI", $fontSize, [System.Drawing.FontStyle]::Regular)
+
+    return $tabControl
+}
+
+function New-ResponsiveTabPage {
+    <#
+    .SYNOPSIS
+        Creates a responsive TabPage with modern styling.
+
+    .PARAMETER Text
+        The text to display on the tab.
+
+    .OUTPUTS
+        System.Windows.Forms.TabPage object with modern styling applied.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Text
+    )
+
+    # Get base dimensions for font sizing
+    $baseDims = Get-ResponsiveBaseDimensions
+    $fontSize = Get-ResponsiveScaledValue -BaseValue $baseDims.BaseFontSize -MinValue $baseDims.MinFontSize
+
+    $tabPage = New-Object System.Windows.Forms.TabPage
+    $tabPage.Text = $Text
+    $tabPage.UseVisualStyleBackColor = $true
+    $tabPage.Font = New-Object System.Drawing.Font("Segoe UI", $fontSize, [System.Drawing.FontStyle]::Regular)
+
+    return $tabPage
+}
+
+function New-ResponsiveMaskedTextBox {
+    <#
+    .SYNOPSIS
+        Creates a responsive MaskedTextBox control with modern styling.
+
+    .PARAMETER X
+        Base X position (before scaling).
+
+    .PARAMETER Y
+        Base Y position (before scaling).
+
+    .PARAMETER Width
+        Base width (before scaling). Default: 250
+
+    .PARAMETER Height
+        Base height (before scaling). Default: 30
+
+    .PARAMETER PasswordChar
+        Character to use for password masking. Default: '*'
+
+    .PARAMETER Text
+        Initial text value.
+
+    .PARAMETER ScaleFactor
+        Optional scale factor. If not provided, uses cached value.
+
+    .OUTPUTS
+        System.Windows.Forms.MaskedTextBox object with modern styling applied.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [int]$X,
+
+        [Parameter(Mandatory = $true)]
+        [int]$Y,
+
+        [Parameter(Mandatory = $false)]
+        [int]$Width = 250,
+
+        [Parameter(Mandatory = $false)]
+        [int]$Height = 30,
+
+        [Parameter(Mandatory = $false)]
+        [char]$PasswordChar = '*',
+
+        [Parameter(Mandatory = $false)]
+        [string]$Text = '',
+
+        [Parameter(Mandatory = $false)]
+        [double]$ScaleFactor
+    )
+
+    if (-not $ScaleFactor) {
+        $scaleInfo = Get-ResponsiveDPIScale
+        $ScaleFactor = $scaleInfo.TotalScale
+    }
+
+    # Get base dimensions for font sizing
+    $baseDims = Get-ResponsiveBaseDimensions
+    $fontSize = Get-ResponsiveScaledValue -BaseValue $baseDims.BaseFontSize -MinValue $baseDims.MinFontSize
+
+    $maskedTextBox = New-Object System.Windows.Forms.MaskedTextBox
+    $maskedTextBox.Text = $Text
+    $maskedTextBox.PasswordChar = $PasswordChar
+    $maskedTextBox.Location = New-Object System.Drawing.Point(
+        (Get-ResponsiveScaledValue -BaseValue $X -ScaleFactor $ScaleFactor),
+        (Get-ResponsiveScaledValue -BaseValue $Y -ScaleFactor $ScaleFactor)
+    )
+    $maskedTextBox.Size = New-Object System.Drawing.Size(
+        (Get-ResponsiveScaledValue -BaseValue $Width -ScaleFactor $ScaleFactor),
+        (Get-ResponsiveScaledValue -BaseValue $Height -ScaleFactor $ScaleFactor)
+    )
+    $maskedTextBox.Font = New-Object System.Drawing.Font("Segoe UI", $fontSize, [System.Drawing.FontStyle]::Regular)
+
+    return $maskedTextBox
 }
 
 #endregion
