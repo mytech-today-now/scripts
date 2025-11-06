@@ -208,36 +208,36 @@ function Get-ResponsiveBaseDimensions {
         FormHeight = 600
         MinFormWidth = 600
         MinFormHeight = 450
-        
-        # Font sizes
-        BaseFontSize = 10
-        MinFontSize = 9
-        TitleFontSize = 14
-        HeaderFontSize = 12
-        
-        # Margins and spacing
-        Margin = 20
-        Spacing = 12
-        SmallSpacing = 8
-        LargeSpacing = 30
-        
-        # Control dimensions
-        ControlHeight = 25
-        ButtonHeight = 35
-        ButtonWidth = 100
-        TextBoxHeight = 25
-        LabelHeight = 20
-        
-        # Layout
-        LabelWidth = 150
-        InputWidth = 250
-        TabMargin = 15
-        
-        # Specific controls
-        ProgressBarHeight = 25
-        CheckBoxHeight = 20
-        NumericUpDownHeight = 25
-        ComboBoxHeight = 25
+
+        # Font sizes - INCREASED 2.4x for better readability
+        BaseFontSize = 24
+        MinFontSize = 20
+        TitleFontSize = 32
+        HeaderFontSize = 28
+
+        # Margins and spacing - INCREASED for larger fonts
+        Margin = 30
+        Spacing = 20
+        SmallSpacing = 15
+        LargeSpacing = 40
+
+        # Control dimensions - INCREASED to accommodate larger fonts
+        ControlHeight = 50
+        ButtonHeight = 60
+        ButtonWidth = 150
+        TextBoxHeight = 50
+        LabelHeight = 50
+
+        # Layout - INCREASED for larger fonts
+        LabelWidth = 250
+        InputWidth = 350
+        TabMargin = 20
+
+        # Specific controls - INCREASED to accommodate larger fonts
+        ProgressBarHeight = 40
+        CheckBoxHeight = 50
+        NumericUpDownHeight = 50
+        ComboBoxHeight = 50
     }
     
     # Merge custom dimensions with defaults
@@ -459,7 +459,7 @@ function New-ResponsiveLabel {
         [int]$Width = 150,
 
         [Parameter(Mandatory = $false)]
-        [int]$Height = 30,
+        [int]$Height = 50,
 
         [Parameter(Mandatory = $false)]
         [double]$ScaleFactor
@@ -532,7 +532,7 @@ function New-ResponsiveTextBox {
         [int]$Width = 250,
 
         [Parameter(Mandatory = $false)]
-        [int]$Height = 30,
+        [int]$Height = 50,
 
         [Parameter(Mandatory = $false)]
         [string]$Text = '',
@@ -587,7 +587,7 @@ function New-ResponsiveButton {
         Base width (before scaling). Default: 100
 
     .PARAMETER Height
-        Base height (before scaling). Default: 40 (increased for better text display)
+        Base height (before scaling). Default: 60 (increased for better text display with larger fonts)
 
     .PARAMETER ScaleFactor
         Optional scale factor. If not provided, uses cached value.
@@ -610,7 +610,7 @@ function New-ResponsiveButton {
         [int]$Width = 100,
 
         [Parameter(Mandatory = $false)]
-        [int]$Height = 40,
+        [int]$Height = 60,
 
         [Parameter(Mandatory = $false)]
         [double]$ScaleFactor
@@ -688,7 +688,7 @@ function New-ResponsiveCheckBox {
         [int]$Width = 200,
 
         [Parameter(Mandatory = $false)]
-        [int]$Height = 30,
+        [int]$Height = 50,
 
         [Parameter(Mandatory = $false)]
         [bool]$Checked = $false,
@@ -916,7 +916,7 @@ function New-ResponsiveNumericUpDown {
         [int]$Width = 120,
 
         [Parameter(Mandatory = $false)]
-        [int]$Height = 30,
+        [int]$Height = 50,
 
         [Parameter(Mandatory = $false)]
         [decimal]$Minimum = 0,
@@ -1003,9 +1003,9 @@ function New-ResponsiveTabControl {
         $ScaleFactor = $scaleInfo.TotalScale
     }
 
-    # Get base dimensions for font sizing
+    # Get base dimensions for font sizing - Use HeaderFontSize for tab headers (larger than controls)
     $baseDims = Get-ResponsiveBaseDimensions
-    $fontSize = Get-ResponsiveScaledValue -BaseValue $baseDims.BaseFontSize -MinValue $baseDims.MinFontSize
+    $fontSize = Get-ResponsiveScaledValue -BaseValue $baseDims.HeaderFontSize -MinValue $baseDims.BaseFontSize
 
     $tabControl = New-Object System.Windows.Forms.TabControl
     $tabControl.Location = New-Object System.Drawing.Point(
@@ -1091,7 +1091,7 @@ function New-ResponsiveMaskedTextBox {
         [int]$Width = 250,
 
         [Parameter(Mandatory = $false)]
-        [int]$Height = 30,
+        [int]$Height = 50,
 
         [Parameter(Mandatory = $false)]
         [char]$PasswordChar = '*',
@@ -1188,6 +1188,103 @@ if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
     Write-Host "Notifications: $($checkBox1.Checked)"
 }
 #>
+
+function New-ResponsiveLinkLabel {
+    <#
+    .SYNOPSIS
+        Creates a responsive LinkLabel control for clickable hyperlinks.
+
+    .PARAMETER Text
+        The text to display in the link label.
+
+    .PARAMETER X
+        Base X position (before scaling).
+
+    .PARAMETER Y
+        Base Y position (before scaling).
+
+    .PARAMETER Width
+        Base width (before scaling). Default: 400
+
+    .PARAMETER Height
+        Base height (before scaling). Default: 50
+
+    .PARAMETER LinkUrl
+        The URL to open when the link is clicked.
+
+    .PARAMETER ScaleFactor
+        Optional scale factor. If not provided, uses cached value.
+
+    .OUTPUTS
+        System.Windows.Forms.LinkLabel object with click handler.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Text,
+
+        [Parameter(Mandatory = $true)]
+        [int]$X,
+
+        [Parameter(Mandatory = $true)]
+        [int]$Y,
+
+        [Parameter(Mandatory = $false)]
+        [int]$Width = 400,
+
+        [Parameter(Mandatory = $false)]
+        [int]$Height = 50,
+
+        [Parameter(Mandatory = $true)]
+        [string]$LinkUrl,
+
+        [Parameter(Mandatory = $false)]
+        [double]$ScaleFactor
+    )
+
+    if (-not $ScaleFactor) {
+        $scaleInfo = Get-ResponsiveDPIScale
+        $ScaleFactor = $scaleInfo.TotalScale
+    }
+
+    # Get base dimensions for font sizing
+    $baseDims = Get-ResponsiveBaseDimensions
+    $fontSize = Get-ResponsiveScaledValue -BaseValue $baseDims.BaseFontSize -MinValue $baseDims.MinFontSize
+
+    $linkLabel = New-Object System.Windows.Forms.LinkLabel
+    $linkLabel.Text = $Text
+    $linkLabel.Location = New-Object System.Drawing.Point(
+        (Get-ResponsiveScaledValue -BaseValue $X -ScaleFactor $ScaleFactor),
+        (Get-ResponsiveScaledValue -BaseValue $Y -ScaleFactor $ScaleFactor)
+    )
+    $linkLabel.Size = New-Object System.Drawing.Size(
+        (Get-ResponsiveScaledValue -BaseValue $Width -ScaleFactor $ScaleFactor),
+        (Get-ResponsiveScaledValue -BaseValue $Height -ScaleFactor $ScaleFactor)
+    )
+    $linkLabel.AutoSize = $false
+    $linkLabel.Font = New-Object System.Drawing.Font("Segoe UI", $fontSize, [System.Drawing.FontStyle]::Regular)
+    $linkLabel.LinkColor = [System.Drawing.Color]::FromArgb(0, 102, 204)
+    $linkLabel.ActiveLinkColor = [System.Drawing.Color]::FromArgb(0, 51, 153)
+    $linkLabel.VisitedLinkColor = [System.Drawing.Color]::FromArgb(128, 0, 128)
+
+    # Add click handler to open URL
+    $linkLabel.Add_LinkClicked({
+        param($sender, $e)
+        try {
+            Start-Process $LinkUrl
+        }
+        catch {
+            [System.Windows.Forms.MessageBox]::Show(
+                "Failed to open link: $($_.Exception.Message)",
+                "Error",
+                [System.Windows.Forms.MessageBoxButtons]::OK,
+                [System.Windows.Forms.MessageBoxIcon]::Error
+            )
+        }
+    })
+
+    return $linkLabel
+}
 
 #endregion
 
