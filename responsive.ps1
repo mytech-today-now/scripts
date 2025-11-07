@@ -214,7 +214,7 @@ function Get-ResponsiveBaseDimensions {
         MinFontSize = 8
         TitleFontSize = 10
         HeaderFontSize = 9
-        LabelFontSize = 9  # Same as controls for consistency
+        LabelFontSize = 8  # 1pt smaller than controls for better visual hierarchy
 
         # Margins and spacing - Microsoft Standards
         Margin = 12
