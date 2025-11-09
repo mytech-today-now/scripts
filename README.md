@@ -17,6 +17,108 @@ The helper scripts repository serves as a centralized location for:
 
 ## Available Helper Scripts
 
+### 📝 `logging.ps1` - Generic Logging Module
+
+**Purpose:** Provides centralized logging functionality for all myTech.Today PowerShell scripts.
+
+**Features:**
+- Centralized logging to `C:\mytech.today\logs\`
+- Monthly log rotation (one file per month)
+- Cyclical logging with 10MB size limit
+- Markdown table format for structured logging
+- ASCII-only indicators (no emoji) - `[INFO]`, `[OK]`, `[WARN]`, `[ERROR]`
+- Console output with color coding
+- Can be imported from GitHub URL
+- PowerShell 5.1+ compatible
+
+**Usage:**
+
+```powershell
+# Method 1: Load from GitHub (recommended for distributed scripts)
+$loggingUrl = 'https://raw.githubusercontent.com/mytech-today-now/PowerShellScripts/main/scripts/logging.ps1'
+Invoke-Expression (Invoke-WebRequest -Uri $loggingUrl -UseBasicParsing).Content
+
+# Method 2: Dot-source from local path (for development)
+. "$PSScriptRoot\..\scripts\logging.ps1"
+
+# Initialize logging
+Initialize-Log -ScriptName "MyScript" -ScriptVersion "1.0.0"
+
+# Write log entries
+Write-Log "Script started" -Level INFO
+Write-Log "Operation completed successfully" -Level SUCCESS
+Write-Log "Warning: Configuration file not found" -Level WARNING
+Write-Log "Error: Failed to connect to server" -Level ERROR
+
+# Get current log path
+$logPath = Get-LogPath
+Write-Host "Logging to: $logPath"
+```
+
+**Available Functions:**
+
+#### Core Functions:
+- `Initialize-Log` - Initializes logging for a script with monthly rotation
+- `Write-Log` - Writes log entries to console and file
+- `Get-LogPath` - Returns the current log file path
+
+**Log Levels:**
+
+| Level | Indicator | Console Color | Description |
+|-------|-----------|---------------|-------------|
+| `INFO` | `[INFO]` | Cyan | Informational messages |
+| `SUCCESS` | `[OK]` | Green | Success messages |
+| `WARNING` | `[WARN]` | Yellow | Warning messages |
+| `ERROR` | `[ERROR]` | Red | Error messages |
+
+**Log File Format:**
+
+```markdown
+# MyScript Log
+
+**Script Version:** 1.0.0
+**Log Started:** 2025-11-09 12:00:00
+**Computer:** HOSTNAME
+**User:** USERNAME
+
+---
+
+## Activity Log
+
+| Timestamp | Level | Message |
+|-----------|-------|---------|
+| 2025-11-09 12:00:01 | [INFO] | Script started |
+| 2025-11-09 12:00:02 | [OK] | Operation completed successfully |
+| 2025-11-09 12:00:03 | [WARN] | Warning: Configuration file not found |
+| 2025-11-09 12:00:04 | [ERROR] | Error: Failed to connect to server |
+```
+
+**Example:**
+
+```powershell
+# Load the logging module
+$loggingUrl = 'https://raw.githubusercontent.com/mytech-today-now/PowerShellScripts/main/scripts/logging.ps1'
+Invoke-Expression (Invoke-WebRequest -Uri $loggingUrl -UseBasicParsing).Content
+
+# Initialize logging
+Initialize-Log -ScriptName "BackupScript" -ScriptVersion "1.0.0"
+
+# Script logic with logging
+Write-Log "Starting backup process..." -Level INFO
+
+try {
+    Write-Log "Backing up files..." -Level INFO
+    # ... backup logic ...
+    Write-Log "Backup completed successfully" -Level SUCCESS
+}
+catch {
+    Write-Log "Backup failed: $_" -Level ERROR
+    throw
+}
+```
+
+---
+
 ### 📐 `responsive.ps1` - Responsive GUI Helper
 
 **Purpose:** Provides comprehensive responsive GUI functionality for PowerShell Windows Forms applications.
