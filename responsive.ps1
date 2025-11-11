@@ -1,4 +1,4 @@
-<#
+<##
 .SYNOPSIS
     Responsive GUI Helper Script for PowerShell Windows Forms Applications
 
