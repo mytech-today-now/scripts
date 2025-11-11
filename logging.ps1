@@ -1,4 +1,4 @@
-<#
+<##
 .SYNOPSIS
     Generic logging module for myTech.Today PowerShell scripts.
 
