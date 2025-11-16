@@ -5,7 +5,7 @@
 .DESCRIPTION
     Provides centralized logging functionality for all myTech.Today scripts.
     Features:
-    - Centralized logging to C:\mytech.today\logs\
+    - Centralized logging to %USERPROFILE%\myTech.Today\
     - Monthly log rotation (one file per month)
     - Cyclical logging with 10MB size limit
     - Markdown table format for structured logging
@@ -22,7 +22,7 @@
     Requires:       PowerShell 5.1 or later
 
     Usage from GitHub:
-    $loggingUrl = 'https://raw.githubusercontent.com/mytech-today-now/PowerShellScripts/main/scripts/logging.ps1'
+    $loggingUrl = 'https://raw.githubusercontent.com/mytech-today-now/scripts/refs/heads/main/logging.ps1'
     Invoke-Expression (Invoke-WebRequest -Uri $loggingUrl -UseBasicParsing).Content
 
     Usage from local path:
@@ -50,7 +50,7 @@
 
 # Script-scoped variables
 $script:LogPath = $null
-$script:CentralLogPath = "C:\mytech.today\logs\"
+$script:CentralLogPath = "$env:USERPROFILE\myTech.Today\"
 $script:MaxLogSizeMB = 10
 $script:ScriptName = $null
 $script:ScriptVersion = $null
@@ -71,7 +71,7 @@ function Initialize-Log {
         Version of the script (included in log header).
 
     .PARAMETER LogPath
-        Optional custom log path. If not specified, uses C:\mytech.today\logs\
+        Optional custom log path. If not specified, uses %USERPROFILE%\myTech.Today\
 
     .PARAMETER MaxLogSizeMB
         Maximum log file size in MB before rotation. Default is 10MB.
