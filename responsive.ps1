@@ -477,7 +477,7 @@ function New-ResponsiveLabel {
 
     $label = New-Object System.Windows.Forms.Label
     $label.Text = $Text
-    $label.Location = New-Object System.Drawing.Point(
+    $label.Location = New-Object System.Drawing.Point -ArgumentList (
         (Get-ResponsiveScaledValue -BaseValue $X -ScaleFactor $ScaleFactor),
         (Get-ResponsiveScaledValue -BaseValue $Y -ScaleFactor $ScaleFactor)
     )
@@ -557,7 +557,7 @@ function New-ResponsiveTextBox {
     $textBox = New-Object System.Windows.Forms.TextBox
     $textBox.Text = $Text
     $textBox.Multiline = $Multiline
-    $textBox.Location = New-Object System.Drawing.Point(
+    $textBox.Location = New-Object System.Drawing.Point -ArgumentList (
         (Get-ResponsiveScaledValue -BaseValue $X -ScaleFactor $ScaleFactor),
         (Get-ResponsiveScaledValue -BaseValue $Y -ScaleFactor $ScaleFactor)
     )
@@ -628,7 +628,7 @@ function New-ResponsiveButton {
 
     $button = New-Object System.Windows.Forms.Button
     $button.Text = $Text
-    $button.Location = New-Object System.Drawing.Point(
+    $button.Location = New-Object System.Drawing.Point -ArgumentList (
         (Get-ResponsiveScaledValue -BaseValue $X -ScaleFactor $ScaleFactor),
         (Get-ResponsiveScaledValue -BaseValue $Y -ScaleFactor $ScaleFactor)
     )
@@ -710,7 +710,7 @@ function New-ResponsiveCheckBox {
     $checkBox = New-Object System.Windows.Forms.CheckBox
     $checkBox.Text = $Text
     $checkBox.Checked = $Checked
-    $checkBox.Location = New-Object System.Drawing.Point(
+    $checkBox.Location = New-Object System.Drawing.Point -ArgumentList (
         (Get-ResponsiveScaledValue -BaseValue $X -ScaleFactor $ScaleFactor),
         (Get-ResponsiveScaledValue -BaseValue $Y -ScaleFactor $ScaleFactor)
     )
@@ -785,7 +785,7 @@ function New-ResponsiveComboBox {
 
     $comboBox = New-Object System.Windows.Forms.ComboBox
     $comboBox.DropDownStyle = [System.Windows.Forms.ComboBoxStyle]::DropDownList
-    $comboBox.Location = New-Object System.Drawing.Point(
+    $comboBox.Location = New-Object System.Drawing.Point -ArgumentList (
         (Get-ResponsiveScaledValue -BaseValue $X -ScaleFactor $ScaleFactor),
         (Get-ResponsiveScaledValue -BaseValue $Y -ScaleFactor $ScaleFactor)
     )
@@ -861,7 +861,7 @@ function New-ResponsiveProgressBar {
     $progressBar.Minimum = 0
     $progressBar.Maximum = 100
     $progressBar.Value = $Value
-    $progressBar.Location = New-Object System.Drawing.Point(
+    $progressBar.Location = New-Object System.Drawing.Point -ArgumentList (
         (Get-ResponsiveScaledValue -BaseValue $X -ScaleFactor $ScaleFactor),
         (Get-ResponsiveScaledValue -BaseValue $Y -ScaleFactor $ScaleFactor)
     )
@@ -945,7 +945,7 @@ function New-ResponsiveNumericUpDown {
     $numericUpDown.Minimum = $Minimum
     $numericUpDown.Maximum = $Maximum
     $numericUpDown.Value = $Value
-    $numericUpDown.Location = New-Object System.Drawing.Point(
+    $numericUpDown.Location = New-Object System.Drawing.Point -ArgumentList (
         (Get-ResponsiveScaledValue -BaseValue $X -ScaleFactor $ScaleFactor),
         (Get-ResponsiveScaledValue -BaseValue $Y -ScaleFactor $ScaleFactor)
     )
@@ -1009,7 +1009,7 @@ function New-ResponsiveTabControl {
     $fontSize = Get-ResponsiveScaledValue -BaseValue $baseDims.HeaderFontSize -MinValue $baseDims.BaseFontSize
 
     $tabControl = New-Object System.Windows.Forms.TabControl
-    $tabControl.Location = New-Object System.Drawing.Point(
+    $tabControl.Location = New-Object System.Drawing.Point -ArgumentList (
         (Get-ResponsiveScaledValue -BaseValue $X -ScaleFactor $ScaleFactor),
         (Get-ResponsiveScaledValue -BaseValue $Y -ScaleFactor $ScaleFactor)
     )
@@ -1116,7 +1116,7 @@ function New-ResponsiveMaskedTextBox {
     $maskedTextBox = New-Object System.Windows.Forms.MaskedTextBox
     $maskedTextBox.Text = $Text
     $maskedTextBox.PasswordChar = $PasswordChar
-    $maskedTextBox.Location = New-Object System.Drawing.Point(
+    $maskedTextBox.Location = New-Object System.Drawing.Point -ArgumentList (
         (Get-ResponsiveScaledValue -BaseValue $X -ScaleFactor $ScaleFactor),
         (Get-ResponsiveScaledValue -BaseValue $Y -ScaleFactor $ScaleFactor)
     )
@@ -1254,7 +1254,7 @@ function New-ResponsiveLinkLabel {
 
     $linkLabel = New-Object System.Windows.Forms.LinkLabel
     $linkLabel.Text = $Text
-    $linkLabel.Location = New-Object System.Drawing.Point(
+    $linkLabel.Location = New-Object System.Drawing.Point -ArgumentList (
         (Get-ResponsiveScaledValue -BaseValue $X -ScaleFactor $ScaleFactor),
         (Get-ResponsiveScaledValue -BaseValue $Y -ScaleFactor $ScaleFactor)
     )
