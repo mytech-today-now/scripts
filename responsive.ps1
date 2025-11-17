@@ -6,7 +6,7 @@
     This helper script provides comprehensive responsive GUI functionality for PowerShell scripts.
     It automatically handles DPI scaling, resolution detection, and responsive control sizing
     for all screen resolutions from VGA (640x480) to 8K UHD (7680x4320).
-    
+
     This script is designed to be called from other PowerShell scripts via GitHub URL or local path.
     It follows the myTech.Today GUI responsiveness standards from .augment/gui-responsiveness.md
 
@@ -14,10 +14,10 @@
     # Method 1: Call from GitHub (recommended for distributed scripts)
     $responsiveUrl = 'https://raw.githubusercontent.com/mytech-today-now/PowerShellScripts/main/scripts/responsive.ps1'
     Invoke-Expression (Invoke-WebRequest -Uri $responsiveUrl -UseBasicParsing).Content
-    
+
     # Method 2: Dot-source from local path (for development)
     . "$PSScriptRoot\..\scripts\responsive.ps1"
-    
+
     # Then use the functions in your script:
     $scaleInfo = Get-ResponsiveDPIScale
     $form = New-ResponsiveForm -Title "My App" -Width 800 -Height 600
@@ -82,26 +82,26 @@ function Get-ResponsiveDPIScale {
         [Parameter(Mandatory = $false)]
         [switch]$Force
     )
-    
+
     # Return cached value if available and not forcing recalculation
     if ($script:CachedScaleInfo -and -not $Force) {
         return $script:CachedScaleInfo
     }
-    
+
     $screen = [System.Windows.Forms.Screen]::PrimaryScreen
-    
+
     # Calculate base DPI scaling
     $dpiX = $screen.Bounds.Width / [System.Windows.Forms.SystemInformation]::PrimaryMonitorSize.Width
     $dpiY = $screen.Bounds.Height / [System.Windows.Forms.SystemInformation]::PrimaryMonitorSize.Height
-    
+
     # Use the larger of the two scaling factors, with a minimum of 1.0
     $baseFactor = [Math]::Max([Math]::Max($dpiX, $dpiY), 1.0)
-    
+
     # Apply resolution-specific additional scaling
     $additionalScale = 1.0
     $resolutionName = "Unknown"
     $resolutionCategory = "Unknown"
-    
+
     if ($screen.Bounds.Width -ge 7680) {
         $additionalScale = 2.5
         $resolutionName = "8K UHD (7680x4320)"
@@ -157,9 +157,9 @@ function Get-ResponsiveDPIScale {
         $resolutionName = "VGA (640x480)"
         $resolutionCategory = "VGA"
     }
-    
+
     $scaleFactor = $baseFactor * $additionalScale
-    
+
     # Cache the result
     $script:CachedScaleInfo = [PSCustomObject]@{
         BaseFactor = $baseFactor
@@ -172,7 +172,7 @@ function Get-ResponsiveDPIScale {
         ResolutionName = $resolutionName
         ResolutionCategory = $resolutionCategory
     }
-    
+
     return $script:CachedScaleInfo
 }
 
@@ -200,7 +200,7 @@ function Get-ResponsiveBaseDimensions {
         [Parameter(Mandatory = $false)]
         [hashtable]$CustomDimensions = @{}
     )
-    
+
     # Default base dimensions (before scaling)
     $defaultDimensions = @{
         # Form dimensions
@@ -240,12 +240,12 @@ function Get-ResponsiveBaseDimensions {
         NumericUpDownHeight = 20
         ComboBoxHeight = 21
     }
-    
+
     # Merge custom dimensions with defaults
     foreach ($key in $CustomDimensions.Keys) {
         $defaultDimensions[$key] = $CustomDimensions[$key]
     }
-    
+
     return $defaultDimensions
 }
 
@@ -280,26 +280,26 @@ function Get-ResponsiveScaledValue {
     param(
         [Parameter(Mandatory = $true)]
         [int]$BaseValue,
-        
+
         [Parameter(Mandatory = $false)]
         [double]$ScaleFactor,
-        
+
         [Parameter(Mandatory = $false)]
         [int]$MinValue,
-        
+
         [Parameter(Mandatory = $false)]
         [int]$MaxValue
     )
-    
+
     # Get scale factor if not provided
     if (-not $ScaleFactor) {
         $scaleInfo = Get-ResponsiveDPIScale
         $ScaleFactor = $scaleInfo.TotalScale
     }
-    
+
     # Calculate scaled value
     $scaledValue = [int]($BaseValue * $ScaleFactor)
-    
+
     # Apply min/max constraints
     if ($MinValue -and $scaledValue -lt $MinValue) {
         $scaledValue = $MinValue
@@ -307,7 +307,7 @@ function Get-ResponsiveScaledValue {
     if ($MaxValue -and $scaledValue -gt $MaxValue) {
         $scaledValue = $MaxValue
     }
-    
+
     return $scaledValue
 }
 
@@ -419,6 +419,59 @@ function New-ResponsiveForm {
     return $form
 }
 
+
+function New-ResponsivePoint {
+    <#
+    .SYNOPSIS
+    Safely construct a System.Drawing.Point from X/Y values, guarding against
+    unexpected argument expansion issues (e.g., 4-arg constructor errors).
+
+    .DESCRIPTION
+    Handles both standard call style New-ResponsivePoint $x $y and the
+    array-style call New-ResponsivePoint($x, $y) by unpacking the array
+    PowerShell creates for the arguments.
+    #>
+    param(
+        [Parameter(Position = 0)]
+        [object]$X,
+        [Parameter(Position = 1)]
+        [object]$Y
+    )
+
+    # Flatten potential arrays and coerce to integers so that only two
+    # well-defined values are ever passed to the Point constructor.
+    $rawX = $X
+    $rawY = $Y
+
+    # If called as New-ResponsivePoint($x, $y), PowerShell passes a single
+    # array argument. When Y is not explicitly provided, unpack X into X/Y.
+    if ($null -eq $Y -and $X -is [System.Array] -and $X.Count -ge 2) {
+        $Y = $X[1]
+        $X = $X[0]
+    }
+
+    if ($X -is [System.Array] -and $X.Count -gt 0) { $X = $X[0] }
+    if ($Y -is [System.Array] -and $Y.Count -gt 0) { $Y = $Y[0] }
+
+    try {
+        $intX = [int]$X
+        $intY = [int]$Y
+
+        return New-Object System.Drawing.Point($intX, $intY)
+    }
+    catch {
+        $message = "New-ResponsivePoint failed to construct System.Drawing.Point. RawX='$rawX', RawY='$rawY', X='$X', Y='$Y'. Error: $($_.Exception.Message)"
+        $writeLog = Get-Command -Name Write-Log -ErrorAction SilentlyContinue
+        if ($writeLog) {
+            & $writeLog -Message $message -Level ERROR
+        }
+        else {
+            Write-Warning $message
+        }
+        throw
+    }
+}
+
 function New-ResponsiveLabel {
     <#
     .SYNOPSIS
@@ -477,7 +530,7 @@ function New-ResponsiveLabel {
 
     $label = New-Object System.Windows.Forms.Label
     $label.Text = $Text
-    $label.Location = New-Object System.Drawing.Point(
+    $label.Location = New-ResponsivePoint(
         (Get-ResponsiveScaledValue -BaseValue $X -ScaleFactor $ScaleFactor),
         (Get-ResponsiveScaledValue -BaseValue $Y -ScaleFactor $ScaleFactor)
     )
@@ -557,7 +610,7 @@ function New-ResponsiveTextBox {
     $textBox = New-Object System.Windows.Forms.TextBox
     $textBox.Text = $Text
     $textBox.Multiline = $Multiline
-    $textBox.Location = New-Object System.Drawing.Point(
+    $textBox.Location = New-ResponsivePoint(
         (Get-ResponsiveScaledValue -BaseValue $X -ScaleFactor $ScaleFactor),
         (Get-ResponsiveScaledValue -BaseValue $Y -ScaleFactor $ScaleFactor)
     )
@@ -628,7 +681,7 @@ function New-ResponsiveButton {
 
     $button = New-Object System.Windows.Forms.Button
     $button.Text = $Text
-    $button.Location = New-Object System.Drawing.Point(
+    $button.Location = New-ResponsivePoint(
         (Get-ResponsiveScaledValue -BaseValue $X -ScaleFactor $ScaleFactor),
         (Get-ResponsiveScaledValue -BaseValue $Y -ScaleFactor $ScaleFactor)
     )
@@ -710,7 +763,7 @@ function New-ResponsiveCheckBox {
     $checkBox = New-Object System.Windows.Forms.CheckBox
     $checkBox.Text = $Text
     $checkBox.Checked = $Checked
-    $checkBox.Location = New-Object System.Drawing.Point(
+    $checkBox.Location = New-ResponsivePoint(
         (Get-ResponsiveScaledValue -BaseValue $X -ScaleFactor $ScaleFactor),
         (Get-ResponsiveScaledValue -BaseValue $Y -ScaleFactor $ScaleFactor)
     )
@@ -785,7 +838,7 @@ function New-ResponsiveComboBox {
 
     $comboBox = New-Object System.Windows.Forms.ComboBox
     $comboBox.DropDownStyle = [System.Windows.Forms.ComboBoxStyle]::DropDownList
-    $comboBox.Location = New-Object System.Drawing.Point(
+    $comboBox.Location = New-ResponsivePoint(
         (Get-ResponsiveScaledValue -BaseValue $X -ScaleFactor $ScaleFactor),
         (Get-ResponsiveScaledValue -BaseValue $Y -ScaleFactor $ScaleFactor)
     )
@@ -861,7 +914,7 @@ function New-ResponsiveProgressBar {
     $progressBar.Minimum = 0
     $progressBar.Maximum = 100
     $progressBar.Value = $Value
-    $progressBar.Location = New-Object System.Drawing.Point(
+    $progressBar.Location = New-ResponsivePoint(
         (Get-ResponsiveScaledValue -BaseValue $X -ScaleFactor $ScaleFactor),
         (Get-ResponsiveScaledValue -BaseValue $Y -ScaleFactor $ScaleFactor)
     )
@@ -945,7 +998,7 @@ function New-ResponsiveNumericUpDown {
     $numericUpDown.Minimum = $Minimum
     $numericUpDown.Maximum = $Maximum
     $numericUpDown.Value = $Value
-    $numericUpDown.Location = New-Object System.Drawing.Point(
+    $numericUpDown.Location = New-ResponsivePoint(
         (Get-ResponsiveScaledValue -BaseValue $X -ScaleFactor $ScaleFactor),
         (Get-ResponsiveScaledValue -BaseValue $Y -ScaleFactor $ScaleFactor)
     )
@@ -1009,7 +1062,7 @@ function New-ResponsiveTabControl {
     $fontSize = Get-ResponsiveScaledValue -BaseValue $baseDims.HeaderFontSize -MinValue $baseDims.BaseFontSize
 
     $tabControl = New-Object System.Windows.Forms.TabControl
-    $tabControl.Location = New-Object System.Drawing.Point(
+    $tabControl.Location = New-ResponsivePoint(
         (Get-ResponsiveScaledValue -BaseValue $X -ScaleFactor $ScaleFactor),
         (Get-ResponsiveScaledValue -BaseValue $Y -ScaleFactor $ScaleFactor)
     )
@@ -1116,7 +1169,7 @@ function New-ResponsiveMaskedTextBox {
     $maskedTextBox = New-Object System.Windows.Forms.MaskedTextBox
     $maskedTextBox.Text = $Text
     $maskedTextBox.PasswordChar = $PasswordChar
-    $maskedTextBox.Location = New-Object System.Drawing.Point(
+    $maskedTextBox.Location = New-ResponsivePoint(
         (Get-ResponsiveScaledValue -BaseValue $X -ScaleFactor $ScaleFactor),
         (Get-ResponsiveScaledValue -BaseValue $Y -ScaleFactor $ScaleFactor)
     )
@@ -1254,7 +1307,7 @@ function New-ResponsiveLinkLabel {
 
     $linkLabel = New-Object System.Windows.Forms.LinkLabel
     $linkLabel.Text = $Text
-    $linkLabel.Location = New-Object System.Drawing.Point(
+    $linkLabel.Location = New-ResponsivePoint(
         (Get-ResponsiveScaledValue -BaseValue $X -ScaleFactor $ScaleFactor),
         (Get-ResponsiveScaledValue -BaseValue $Y -ScaleFactor $ScaleFactor)
     )
