@@ -49,11 +49,53 @@
 #Requires -Version 5.1
 
 # Script-scoped variables
-$script:LogPath = $null
-$script:CentralLogPath = "$env:USERPROFILE\myTech.Today\"
-$script:MaxLogSizeMB = 10
-$script:ScriptName = $null
-$script:ScriptVersion = $null
+$script:LogPath          = $null
+$script:CentralLogPath   = "$env:USERPROFILE\myTech.Today\"
+$script:MaxLogSizeMB     = 10
+$script:ScriptName       = $null
+$script:ScriptVersion    = $null
+
+# Windows Event Log integration (best-effort; failures do not block file logging)
+$script:EnableEventLog   = $true
+$script:EventLogBaseName = 'MyTech.Today'
+$script:EventLogName     = $null
+$script:EventSource      = $null
+
+function Initialize-MyTechTodayEventLog {
+    <#
+    .SYNOPSIS
+        Initializes Windows Event Log integration for the current script.
+
+    .DESCRIPTION
+        Creates (if necessary) a dedicated Event Log for the script under the
+        MyTech.Today namespace and configures an event source for the script.
+        If creation fails (for example, due to insufficient privileges), file
+        logging continues to work and event logging is silently disabled.
+
+    .PARAMETER ScriptName
+        The logical name of the script (used to derive the log and source names).
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
+        [string]$ScriptName
+    )
+
+    try {
+        # Each script gets its own log, grouped under the MyTech.Today namespace
+        $script:EventLogName = "MyTech.Today-$ScriptName"
+        $script:EventSource  = "MyTech.Today.$ScriptName"
+
+        if (-not [System.Diagnostics.EventLog]::SourceExists($script:EventSource)) {
+            New-EventLog -LogName $script:EventLogName -Source $script:EventSource -ErrorAction Stop
+        }
+    }
+    catch {
+        # If event log registration fails (e.g. non-admin), disable event logging
+        $script:EnableEventLog = $false
+    }
+}
 
 function Initialize-Log {
     <#
@@ -102,9 +144,12 @@ function Initialize-Log {
 
     try {
         # Set script-scoped variables
-        $script:ScriptName = $ScriptName
+        $script:ScriptName    = $ScriptName
         $script:ScriptVersion = $ScriptVersion
-        $script:MaxLogSizeMB = $MaxLogSizeMB
+        $script:MaxLogSizeMB  = $MaxLogSizeMB
+
+        # Initialize Windows Event Log integration (best-effort)
+        Initialize-MyTechTodayEventLog -ScriptName $ScriptName
 
         # Determine log directory
         if ($LogPath) {
@@ -230,6 +275,34 @@ function Write-Log {
     }
     catch {
         # Silently continue if file logging fails
+    }
+
+    # Also write to Windows Event Log (best-effort)
+    if ($script:EnableEventLog -and $script:EventLogName -and $script:EventSource) {
+        try {
+            $entryType = switch ($Level) {
+                'SUCCESS' { [System.Diagnostics.EventLogEntryType]::Information }
+                'INFO'    { [System.Diagnostics.EventLogEntryType]::Information }
+                'WARNING' { [System.Diagnostics.EventLogEntryType]::Warning }
+                'ERROR'   { [System.Diagnostics.EventLogEntryType]::Error }
+                default   { [System.Diagnostics.EventLogEntryType]::Information }
+            }
+
+            $eventId = switch ($Level) {
+                'SUCCESS' { 1001 }
+                'INFO'    { 1000 }
+                'WARNING' { 2000 }
+                'ERROR'   { 3000 }
+                default   { 1000 }
+            }
+
+            $eventMessage = "[$timestamp] $($config.Indicator) $Message"
+            Write-EventLog -LogName $script:EventLogName -Source $script:EventSource -EntryType $entryType -EventId $eventId -Message $eventMessage -ErrorAction SilentlyContinue
+        }
+        catch {
+            # If event log write fails, disable further event logging to avoid repeated errors
+            $script:EnableEventLog = $false
+        }
     }
 }
 
