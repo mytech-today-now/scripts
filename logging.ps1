@@ -5,20 +5,21 @@
 .DESCRIPTION
     Provides centralized logging functionality for all myTech.Today scripts.
     Features:
-    - Centralized logging to %USERPROFILE%\myTech.Today\
-    - Monthly log rotation (one file per month)
+    - Centralized logging to %USERPROFILE%\myTech.Today\logs\
+    - Monthly log archiving (current: scriptname.md, archived: scriptname.YYYY-MM.md)
     - Cyclical logging with 10MB size limit
     - Markdown table format for structured logging
     - ASCII-only indicators (no emoji)
     - Console output with color coding
+    - Windows Event Log integration under 'myTech.Today' root folder
     - Can be imported from GitHub URL
 
 .NOTES
     Name:           logging.ps1
     Author:         myTech.Today
-    Version:        1.0.0
+    Version:        2.0.0
     DateCreated:    2025-11-09
-    LastModified:   2025-11-09
+    LastModified:   2025-11-20
     Requires:       PowerShell 5.1 or later
 
     Usage from GitHub:
@@ -50,16 +51,15 @@
 
 # Script-scoped variables
 $script:LogPath          = $null
-$script:CentralLogPath   = "$env:USERPROFILE\myTech.Today\"
+$script:CentralLogPath   = "$env:USERPROFILE\myTech.Today\logs\"
 $script:MaxLogSizeMB     = 10
 $script:ScriptName       = $null
 $script:ScriptVersion    = $null
 
 # Windows Event Log integration (best-effort; failures do not block file logging)
 $script:EnableEventLog   = $true
-$script:EventLogBaseName = 'MyTech.Today'
-$script:EventLogName     = $null
-$script:EventSource      = $null
+$script:EventLogName     = 'myTech.Today'  # Root folder for all myTech.Today events
+$script:EventSource      = $null           # Will be set to script name (sub-item under root)
 
 function Initialize-MyTechTodayEventLog {
     <#
@@ -67,13 +67,13 @@ function Initialize-MyTechTodayEventLog {
         Initializes Windows Event Log integration for the current script.
 
     .DESCRIPTION
-        Creates (if necessary) a dedicated Event Log for the script under the
-        MyTech.Today namespace and configures an event source for the script.
+        Creates (if necessary) a root 'myTech.Today' Event Log and registers the
+        script as an event source (sub-item) under that root folder.
         If creation fails (for example, due to insufficient privileges), file
         logging continues to work and event logging is silently disabled.
 
     .PARAMETER ScriptName
-        The logical name of the script (used to derive the log and source names).
+        The logical name of the script (used as the event source name).
     #>
     [CmdletBinding()]
     param(
@@ -83,12 +83,24 @@ function Initialize-MyTechTodayEventLog {
     )
 
     try {
-        # Each script gets its own log, grouped under the MyTech.Today namespace
-        $script:EventLogName = "MyTech.Today-$ScriptName"
-        $script:EventSource  = "MyTech.Today.$ScriptName"
+        # All scripts share the same root Event Log: 'myTech.Today'
+        # Each script is registered as a separate source (sub-item) under this log
+        $script:EventLogName = 'myTech.Today'
+        $script:EventSource  = $ScriptName
 
+        # Check if the source already exists
         if (-not [System.Diagnostics.EventLog]::SourceExists($script:EventSource)) {
+            # Create the event source under the 'myTech.Today' log
             New-EventLog -LogName $script:EventLogName -Source $script:EventSource -ErrorAction Stop
+        }
+        else {
+            # Verify the source is registered to the correct log
+            $existingLog = [System.Diagnostics.EventLog]::LogNameFromSourceName($script:EventSource, '.')
+            if ($existingLog -ne $script:EventLogName) {
+                # Source exists but is registered to a different log - disable event logging
+                Write-Warning "Event source '$script:EventSource' is already registered to log '$existingLog'. Event logging disabled."
+                $script:EnableEventLog = $false
+            }
         }
     }
     catch {
@@ -113,7 +125,7 @@ function Initialize-Log {
         Version of the script (included in log header).
 
     .PARAMETER LogPath
-        Optional custom log path. If not specified, uses %USERPROFILE%\myTech.Today\
+        Optional custom log path. If not specified, uses %USERPROFILE%\myTech.Today\logs\
 
     .PARAMETER MaxLogSizeMB
         Maximum log file size in MB before rotation. Default is 10MB.
@@ -161,25 +173,45 @@ function Initialize-Log {
             New-Item -ItemType Directory -Path $script:CentralLogPath -Force | Out-Null
         }
 
-        # Calculate log file name (monthly format: ScriptName-yyyy-MM.md)
-        $monthStamp = Get-Date -Format 'yyyy-MM'
-        $logFileName = "$ScriptName-$monthStamp.md"
+        # Calculate log file name (format: scriptname.md, lowercase)
+        $logFileName = "$($ScriptName.ToLower()).md"
         $script:LogPath = Join-Path $script:CentralLogPath $logFileName
 
-        # Check if log file exists and needs rotation
+        # Check if log file exists and needs monthly archiving
         if (Test-Path $script:LogPath) {
             $logFile = Get-Item $script:LogPath
-            $sizeMB = $logFile.Length / 1MB
+            $logLastWriteMonth = $logFile.LastWriteTime.ToString('yyyy-MM')
+            $currentMonth = Get-Date -Format 'yyyy-MM'
 
-            if ($sizeMB -gt $script:MaxLogSizeMB) {
-                # Archive the log
-                $timestamp = Get-Date -Format 'yyyyMMdd_HHmmss'
-                $archiveName = "$ScriptName-$monthStamp`_archived_$timestamp.md"
+            # If the log file is from a previous month, archive it
+            if ($logLastWriteMonth -ne $currentMonth) {
+                $archiveName = "$($ScriptName.ToLower()).$logLastWriteMonth.md"
                 $archivePath = Join-Path $script:CentralLogPath $archiveName
 
-                Move-Item -Path $script:LogPath -Destination $archivePath -Force -ErrorAction SilentlyContinue
+                # Only archive if the archive doesn't already exist
+                if (-not (Test-Path $archivePath)) {
+                    Move-Item -Path $script:LogPath -Destination $archivePath -Force -ErrorAction SilentlyContinue
+                    Write-Host "[INFO] Previous month's log archived: $archivePath" -ForegroundColor Cyan
+                }
+                else {
+                    # Archive already exists, just delete the old log
+                    Remove-Item -Path $script:LogPath -Force -ErrorAction SilentlyContinue
+                }
+            }
+            else {
+                # Same month - check if log file needs size-based rotation
+                $sizeMB = $logFile.Length / 1MB
 
-                Write-Host "[INFO] Log file archived: $archivePath" -ForegroundColor Cyan
+                if ($sizeMB -gt $script:MaxLogSizeMB) {
+                    # Archive the log with timestamp
+                    $timestamp = Get-Date -Format 'yyyyMMdd_HHmmss'
+                    $archiveName = "$($ScriptName.ToLower())_archived_$timestamp.md"
+                    $archivePath = Join-Path $script:CentralLogPath $archiveName
+
+                    Move-Item -Path $script:LogPath -Destination $archivePath -Force -ErrorAction SilentlyContinue
+
+                    Write-Host "[INFO] Log file size limit exceeded. Archived to: $archivePath" -ForegroundColor Cyan
+                }
             }
         }
 
@@ -296,7 +328,20 @@ function Write-Log {
                 default   { 1000 }
             }
 
-            $eventMessage = "[$timestamp] $($config.Indicator) $Message"
+            # Create detailed event message with full context
+            $eventMessage = @"
+Script: $($script:ScriptName)
+Version: $($script:ScriptVersion)
+Computer: $env:COMPUTERNAME
+User: $env:USERNAME
+Timestamp: $timestamp
+Level: $($config.Indicator)
+
+Message:
+$Message
+
+Log File: $($script:LogPath)
+"@
             Write-EventLog -LogName $script:EventLogName -Source $script:EventSource -EntryType $entryType -EventId $eventId -Message $eventMessage -ErrorAction SilentlyContinue
         }
         catch {
@@ -334,8 +379,8 @@ function Test-LogRotation {
         Checks if log rotation is needed and performs it if necessary.
 
     .DESCRIPTION
-        Internal function that checks the current log file size and archives it
-        if it exceeds the maximum size limit.
+        Internal function that checks the current log file size and month,
+        archiving it if it exceeds the maximum size limit or if the month has changed.
     #>
     [CmdletBinding()]
     param()
@@ -346,16 +391,23 @@ function Test-LogRotation {
 
     try {
         $logFile = Get-Item $script:LogPath
-        $sizeMB = $logFile.Length / 1MB
+        $logLastWriteMonth = $logFile.LastWriteTime.ToString('yyyy-MM')
+        $currentMonth = Get-Date -Format 'yyyy-MM'
 
-        if ($sizeMB -gt $script:MaxLogSizeMB) {
-            # Archive the log
-            $timestamp = Get-Date -Format 'yyyyMMdd_HHmmss'
-            $monthStamp = Get-Date -Format 'yyyy-MM'
-            $archiveName = "$($script:ScriptName)-$monthStamp`_archived_$timestamp.md"
+        # Check if month has changed - archive to previous month's file
+        if ($logLastWriteMonth -ne $currentMonth) {
+            $archiveName = "$($script:ScriptName.ToLower()).$logLastWriteMonth.md"
             $archivePath = Join-Path $script:CentralLogPath $archiveName
 
-            Move-Item -Path $script:LogPath -Destination $archivePath -Force -ErrorAction SilentlyContinue
+            # Only archive if the archive doesn't already exist
+            if (-not (Test-Path $archivePath)) {
+                Move-Item -Path $script:LogPath -Destination $archivePath -Force -ErrorAction SilentlyContinue
+                Write-Host "[INFO] Month changed. Previous month's log archived: $archivePath" -ForegroundColor Cyan
+            }
+            else {
+                # Archive already exists, just delete the old log
+                Remove-Item -Path $script:LogPath -Force -ErrorAction SilentlyContinue
+            }
 
             # Create new log file with header
             $logHeader = @"
@@ -365,7 +417,7 @@ function Test-LogRotation {
 **Log Started:** $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
 **Computer:** $env:COMPUTERNAME
 **User:** $env:USERNAME
-**Note:** Previous log archived to $archiveName
+**Note:** Previous month's log archived to $archiveName
 
 ---
 
@@ -375,8 +427,40 @@ function Test-LogRotation {
 |-----------|-------|---------|
 "@
             Set-Content -Path $script:LogPath -Value $logHeader -Force -ErrorAction SilentlyContinue
+        }
+        else {
+            # Same month - check size-based rotation
+            $sizeMB = $logFile.Length / 1MB
 
-            Write-Host "[INFO] Log file rotated. Archived to: $archivePath" -ForegroundColor Cyan
+            if ($sizeMB -gt $script:MaxLogSizeMB) {
+                # Archive the log with timestamp
+                $timestamp = Get-Date -Format 'yyyyMMdd_HHmmss'
+                $archiveName = "$($script:ScriptName.ToLower())_archived_$timestamp.md"
+                $archivePath = Join-Path $script:CentralLogPath $archiveName
+
+                Move-Item -Path $script:LogPath -Destination $archivePath -Force -ErrorAction SilentlyContinue
+
+                # Create new log file with header
+                $logHeader = @"
+# $($script:ScriptName) Log
+
+**Script Version:** $($script:ScriptVersion)
+**Log Started:** $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
+**Computer:** $env:COMPUTERNAME
+**User:** $env:USERNAME
+**Note:** Previous log archived to $archiveName (size limit exceeded)
+
+---
+
+## Activity Log
+
+| Timestamp | Level | Message |
+|-----------|-------|---------|
+"@
+                Set-Content -Path $script:LogPath -Value $logHeader -Force -ErrorAction SilentlyContinue
+
+                Write-Host "[INFO] Log file size limit exceeded. Archived to: $archivePath" -ForegroundColor Cyan
+            }
         }
     }
     catch {
