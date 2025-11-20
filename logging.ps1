@@ -58,8 +58,8 @@ $script:ScriptVersion    = $null
 
 # Windows Event Log integration (best-effort; failures do not block file logging)
 $script:EnableEventLog   = $true
-$script:EventLogName     = 'myTech.Today'  # Root folder for all myTech.Today events
-$script:EventSource      = $null           # Will be set to script name (sub-item under root)
+$script:EventLogName     = 'myTech.Today'  # Root log in Applications and Services Logs
+$script:EventSource      = $null           # Will be set to script name (source within the log)
 
 function Initialize-MyTechTodayEventLog {
     <#
@@ -67,8 +67,16 @@ function Initialize-MyTechTodayEventLog {
         Initializes Windows Event Log integration for the current script.
 
     .DESCRIPTION
-        Creates (if necessary) a root 'myTech.Today' Event Log and registers the
-        script as an event source (sub-item) under that root folder.
+        Creates (if necessary) the 'myTech.Today' Event Log in Applications and Services Logs
+        and registers the script as an event source within that log.
+
+        Event Viewer Structure:
+        Applications and Services Logs
+          └─ myTech.Today (event log)
+              ├─ Bookmarks-Manager (event source)
+              ├─ AppInstaller (event source)
+              └─ ... (other scripts as sources)
+
         If creation fails (for example, due to insufficient privileges), file
         logging continues to work and event logging is silently disabled.
 
@@ -83,15 +91,34 @@ function Initialize-MyTechTodayEventLog {
     )
 
     try {
-        # All scripts share the same root Event Log: 'myTech.Today'
-        # Each script is registered as a separate source (sub-item) under this log
-        $script:EventLogName = 'myTech.Today'
-        $script:EventSource  = $ScriptName
+        # Set the event source to the script name
+        $script:EventSource = $ScriptName
 
         # Check if the source already exists
         if (-not [System.Diagnostics.EventLog]::SourceExists($script:EventSource)) {
             # Create the event source under the 'myTech.Today' log
+            # This will automatically create the log if it doesn't exist
             New-EventLog -LogName $script:EventLogName -Source $script:EventSource -ErrorAction Stop
+
+            # Ensure the log has a File path configured in the registry
+            # This is required for events to be written to the log
+            $logRegPath = "HKLM:\SYSTEM\CurrentControlSet\Services\EventLog\$($script:EventLogName)"
+            $fileProperty = Get-ItemProperty -Path $logRegPath -Name "File" -ErrorAction SilentlyContinue
+            if (-not $fileProperty -or [string]::IsNullOrWhiteSpace($fileProperty.File)) {
+                # Set the file path for the log
+                $logFileName = $script:EventLogName -replace '\.', ''  # Remove dots for filename
+                Set-ItemProperty -Path $logRegPath -Name "File" -Value "%SystemRoot%\System32\Winevt\Logs\$logFileName.evtx" -ErrorAction Stop
+                # Restart the Event Log service to apply the changes
+                Restart-Service -Name EventLog -Force -ErrorAction Stop
+            }
+
+            # Configure the event source to use PowerShell's message file
+            # This prevents "The description for Event ID cannot be found" warnings in Event Viewer
+            $sourceRegPath = "$logRegPath\$script:EventSource"
+            $messageFile = "%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe"
+            Set-ItemProperty -Path $sourceRegPath -Name "EventMessageFile" -Value $messageFile -ErrorAction SilentlyContinue
+            Set-ItemProperty -Path $sourceRegPath -Name "CategoryMessageFile" -Value $messageFile -ErrorAction SilentlyContinue
+            Set-ItemProperty -Path $sourceRegPath -Name "ParameterMessageFile" -Value $messageFile -ErrorAction SilentlyContinue
         }
         else {
             # Verify the source is registered to the correct log
@@ -100,6 +127,15 @@ function Initialize-MyTechTodayEventLog {
                 # Source exists but is registered to a different log - disable event logging
                 Write-Warning "Event source '$script:EventSource' is already registered to log '$existingLog'. Event logging disabled."
                 $script:EnableEventLog = $false
+            }
+            else {
+                # Source exists and is registered to the correct log
+                # Update the message files to prevent "description cannot be found" warnings
+                $sourceRegPath = "$logRegPath\$script:EventSource"
+                $messageFile = "%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe"
+                Set-ItemProperty -Path $sourceRegPath -Name "EventMessageFile" -Value $messageFile -ErrorAction SilentlyContinue
+                Set-ItemProperty -Path $sourceRegPath -Name "CategoryMessageFile" -Value $messageFile -ErrorAction SilentlyContinue
+                Set-ItemProperty -Path $sourceRegPath -Name "ParameterMessageFile" -Value $messageFile -ErrorAction SilentlyContinue
             }
         }
     }
@@ -342,6 +378,8 @@ $Message
 
 Log File: $($script:LogPath)
 "@
+
+            # Write event to the myTech.Today log
             Write-EventLog -LogName $script:EventLogName -Source $script:EventSource -EntryType $entryType -EventId $eventId -Message $eventMessage -ErrorAction SilentlyContinue
         }
         catch {
