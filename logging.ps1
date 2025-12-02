@@ -12,14 +12,15 @@
     - ASCII-only indicators (no emoji)
     - Console output with color coding
     - Windows Event Log integration under 'myTech.Today' root folder
+    - Enhanced Event Viewer messages with structured Problem/Context/Solution format
     - Can be imported from GitHub URL
 
 .NOTES
     Name:           logging.ps1
     Author:         myTech.Today
-    Version:        2.0.0
+    Version:        2.1.0
     DateCreated:    2025-11-09
-    LastModified:   2025-11-20
+    LastModified:   2025-12-02
     Requires:       PowerShell 5.1 or later
 
     Usage from GitHub:
@@ -280,6 +281,135 @@ function Initialize-Log {
     }
 }
 
+function Build-EnhancedEventMessage {
+    <#
+    .SYNOPSIS
+        Builds a structured, descriptive event message for Windows Event Viewer.
+
+    .DESCRIPTION
+        Creates a well-formatted event message with clear sections for Problem,
+        Context, Solution, and Resources. This helps administrators quickly
+        understand and resolve issues from Event Viewer.
+
+    .PARAMETER Message
+        The primary message describing what happened.
+
+    .PARAMETER Level
+        The log level (INFO, SUCCESS, WARNING, ERROR).
+
+    .PARAMETER Indicator
+        The display indicator for the level (e.g., [WARN], [ERROR]).
+
+    .PARAMETER Timestamp
+        The formatted timestamp string.
+
+    .PARAMETER Solution
+        Optional recommended action or solution.
+
+    .PARAMETER Context
+        Optional additional context about what was happening.
+
+    .PARAMETER Component
+        Optional component or feature name.
+
+    .OUTPUTS
+        System.String
+        A formatted event message string.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Message,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Level,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Indicator,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Timestamp,
+
+        [Parameter(Mandatory = $false)]
+        [string]$Solution,
+
+        [Parameter(Mandatory = $false)]
+        [string]$Context,
+
+        [Parameter(Mandatory = $false)]
+        [string]$Component
+    )
+
+    # Build the base message with script metadata
+    $sb = [System.Text.StringBuilder]::new()
+
+    # Header section with script identification
+    [void]$sb.AppendLine("=============================================================")
+    [void]$sb.AppendLine("  $($script:ScriptName) - Event Log Entry")
+    [void]$sb.AppendLine("=============================================================")
+    [void]$sb.AppendLine("")
+
+    # Event metadata
+    [void]$sb.AppendLine("EVENT DETAILS")
+    [void]$sb.AppendLine("-------------------------------------------------------------")
+    [void]$sb.AppendLine("  Timestamp:    $Timestamp")
+    [void]$sb.AppendLine("  Level:        $Indicator")
+    [void]$sb.AppendLine("  Script:       $($script:ScriptName)")
+    [void]$sb.AppendLine("  Version:      $($script:ScriptVersion)")
+    [void]$sb.AppendLine("  Computer:     $env:COMPUTERNAME")
+    [void]$sb.AppendLine("  User:         $env:USERNAME")
+
+    if ($Component) {
+        [void]$sb.AppendLine("  Component:    $Component")
+    }
+
+    [void]$sb.AppendLine("")
+
+    # Message section with appropriate header based on level
+    $messageHeader = switch ($Level) {
+        'ERROR'   { "ERROR DESCRIPTION" }
+        'WARNING' { "WARNING DESCRIPTION" }
+        'SUCCESS' { "SUCCESS DETAILS" }
+        default   { "INFORMATION" }
+    }
+
+    [void]$sb.AppendLine($messageHeader)
+    [void]$sb.AppendLine("-------------------------------------------------------------")
+    [void]$sb.AppendLine("  $Message")
+    [void]$sb.AppendLine("")
+
+    # Context section (if provided)
+    if ($Context) {
+        [void]$sb.AppendLine("CONTEXT")
+        [void]$sb.AppendLine("-------------------------------------------------------------")
+        [void]$sb.AppendLine("  $Context")
+        [void]$sb.AppendLine("")
+    }
+
+    # Solution/Action section (if provided, especially important for warnings/errors)
+    if ($Solution) {
+        $solutionHeader = switch ($Level) {
+            'ERROR'   { "RECOMMENDED ACTION" }
+            'WARNING' { "SUGGESTED ACTION" }
+            default   { "NOTES" }
+        }
+        [void]$sb.AppendLine($solutionHeader)
+        [void]$sb.AppendLine("-------------------------------------------------------------")
+        [void]$sb.AppendLine("  $Solution")
+        [void]$sb.AppendLine("")
+    }
+
+    # Resources section
+    [void]$sb.AppendLine("RESOURCES")
+    [void]$sb.AppendLine("-------------------------------------------------------------")
+    [void]$sb.AppendLine("  Log File:     $($script:LogPath)")
+    [void]$sb.AppendLine("  Log Folder:   $($script:CentralLogPath)")
+    [void]$sb.AppendLine("")
+    [void]$sb.AppendLine("=============================================================")
+
+    return $sb.ToString()
+}
+
 function Write-Log {
     <#
     .SYNOPSIS
@@ -288,6 +418,8 @@ function Write-Log {
     .DESCRIPTION
         Writes formatted log messages to console with color coding and to file
         in markdown table format. Uses ASCII indicators only (no emoji).
+        Supports enhanced event logging with Solution, Context, and Component
+        parameters for more descriptive Windows Event Viewer messages.
 
     .PARAMETER Message
         The message to log.
@@ -295,11 +427,30 @@ function Write-Log {
     .PARAMETER Level
         The log level: INFO, SUCCESS, WARNING, or ERROR. Default is INFO.
 
+    .PARAMETER Solution
+        Optional. Recommended action or solution for warnings/errors.
+        Used to create more helpful Event Viewer messages.
+
+    .PARAMETER Context
+        Optional. Additional context about what was happening when this event occurred.
+        Used to create more descriptive Event Viewer messages.
+
+    .PARAMETER Component
+        Optional. The component or feature affected (e.g., 'Browser Detection', 'Favicon Fetch').
+        Helps categorize events in Event Viewer.
+
     .EXAMPLE
         Write-Log "Script started" -Level INFO
         Write-Log "Operation completed" -Level SUCCESS
         Write-Log "Warning message" -Level WARNING
         Write-Log "Error occurred" -Level ERROR
+
+    .EXAMPLE
+        # Enhanced logging with context and solution
+        Write-Log "No browser profiles found" -Level WARNING `
+            -Context "Scanning for Chromium browser profiles" `
+            -Solution "Install a supported browser (Chrome, Edge, Brave) or verify browser data exists" `
+            -Component "Browser Detection"
     #>
     [CmdletBinding()]
     param(
@@ -308,7 +459,16 @@ function Write-Log {
 
         [Parameter(Mandatory = $false)]
         [ValidateSet('INFO', 'SUCCESS', 'WARNING', 'ERROR')]
-        [string]$Level = 'INFO'
+        [string]$Level = 'INFO',
+
+        [Parameter(Mandatory = $false)]
+        [string]$Solution,
+
+        [Parameter(Mandatory = $false)]
+        [string]$Context,
+
+        [Parameter(Mandatory = $false)]
+        [string]$Component
     )
 
     # Check if Initialize-Log was called
@@ -364,20 +524,10 @@ function Write-Log {
                 default   { 1000 }
             }
 
-            # Create detailed event message with full context
-            $eventMessage = @"
-Script: $($script:ScriptName)
-Version: $($script:ScriptVersion)
-Computer: $env:COMPUTERNAME
-User: $env:USERNAME
-Timestamp: $timestamp
-Level: $($config.Indicator)
-
-Message:
-$Message
-
-Log File: $($script:LogPath)
-"@
+            # Build enhanced event message using helper function
+            $eventMessage = Build-EnhancedEventMessage -Message $Message -Level $Level `
+                -Indicator $config.Indicator -Timestamp $timestamp `
+                -Solution $Solution -Context $Context -Component $Component
 
             # Write event to the myTech.Today log
             Write-EventLog -LogName $script:EventLogName -Source $script:EventSource -EntryType $entryType -EventId $eventId -Message $eventMessage -ErrorAction SilentlyContinue
