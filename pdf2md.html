@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF to Markdown Bulk Converter</title>
+    
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- PDF.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    </script>
+
+    <!-- JSZip -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-900 h-screen flex flex-col overflow-hidden">
+
+    <div id="root" class="h-full w-full"></div>
+
+    <script type="text/babel">
+        const { useState, useCallback, useRef, useEffect } = React;
+
+        // --- PDF Processing Logic ---
+
+        const processPDF = async (file) => {
+            const arrayBuffer = await file.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+            
+            let fullTextItems = [];
+            let totalHeight = 0;
+            let totalItems = 0;
+            
+            // 1. Extract raw items with position and font data
+            for (let i = 1; i <= pdf.numPages; i++) {
+                const page = await pdf.getPage(i);
+                const viewport = page.getViewport({ scale: 1.0 });
+                const textContent = await page.getTextContent();
+                
+                // Process items for this page
+                const pageItems = textContent.items.map(item => {
+                    // Approximate font height using transform matrix (scale Y)
+                    const height = Math.abs(item.transform[3]); 
+                    if (item.str.trim().length > 0) {
+                        totalHeight += height;
+                        totalItems++;
+                    }
+                    return {
+                        str: item.str,
+                        x: item.transform[4],
+                        y: viewport.height - item.transform[5], // Flip Y to top-down
+                        h: height,
+                        w: item.width,
+                        hasEOL: item.hasEOL,
+                        page: i
+                    };
+                });
+                
+                fullTextItems = [...fullTextItems, ...pageItems];
+            }
+
+            // Calculate average font size (Body text)
+            const avgHeight = totalItems > 0 ? totalHeight / totalItems : 12;
+            
+            // Heuristic thresholds
+            const headerThreshold = avgHeight * 1.15; // Slightly larger = Header
+            const subHeaderThreshold = avgHeight * 1.4; // Much larger = H2/H1
+
+            // Sort by Page -> Y (Top to Bottom) -> X (Left to Right)
+            fullTextItems.sort((a, b) => {
+                if (a.page !== b.page) return a.page - b.page;
+                // Group by line (tolerance of 5px)
+                if (Math.abs(a.y - b.y) > 5) return a.y - b.y;
+                return a.x - b.x;
+            });
+
+            // Group into visual lines
+            const lines = [];
+            let currentLine = { y: -1, items: [], page: -1 };
+
+            fullTextItems.forEach(item => {
+                if (item.page !== currentLine.page || Math.abs(item.y - currentLine.y) > 5) {
+                    if (currentLine.items.length > 0) lines.push(currentLine);
+                    currentLine = { y: item.y, items: [item], page: item.page };
+                } else {
+                    currentLine.items.push(item);
+                }
+            });
+            if (currentLine.items.length > 0) lines.push(currentLine);
+
+            // Convert lines to Markdown with Heuristics
+            let markdownLines = [];
+            
+            lines.forEach((line) => {
+                // Construct line string
+                let lineStr = line.items.map(i => i.str).join(" ").trim();
+                if (!lineStr) return;
+
+                // 1. Filter junk (Page numbers, simple footers)
+                const isPageNum = /^(Page\s*)?\d+(\s*of\s*\d+)?$/i.test(lineStr);
+                if (isPageNum) return; // Skip page numbers
+
+                // Get max font size in this line to determine header status
+                const maxLineHeight = Math.max(...line.items.map(i => i.h));
+
+                // 2. Header Detection
+                let prefix = "";
+                if (maxLineHeight > subHeaderThreshold) {
+                    prefix = "## ";
+                } else if (maxLineHeight > headerThreshold) {
+                    prefix = "### ";
+                }
+
+                // 3. List Detection
+                // Fix common bullet points to markdown
+                if (/^[•●\-]/.test(lineStr)) {
+                    lineStr = lineStr.replace(/^[•●\-]\s*/, "- ");
+                    prefix = ""; // Don't make lists headers even if font is big
+                } else if (/^\d+\./.test(lineStr)) {
+                    // Ordered list, keep as is
+                    prefix = "";
+                }
+
+                markdownLines.push(prefix + lineStr);
+            });
+
+            // --- Post-Processing Cleaning ---
+            
+            let rawMD = markdownLines.join("\n");
+            
+            // 1. Merge hyphenated words at end of line
+            rawMD = rawMD.replace(/(\w)-\n(\w)/g, '$1$2');
+
+            // 2. Merge hard-wrapped lines (Sentence not ending with punctuation)
+            // Look for: Line ending with word char, newline, next line starts with lowercase
+            // This is conservative to avoid merging distinct list items
+            rawMD = rawMD.replace(/([^\.\!\?\:\-])\n([a-z])/g, '$1 $2');
+
+            // 3. Normalize whitespace
+            // Replace 3+ newlines with 2
+            rawMD = rawMD.replace(/\n{3,}/g, '\n\n');
+
+            // Add Title
+            const title = file.name.replace(/\.[^/.]+$/, "");
+            return `# ${title}\n\n${rawMD}`;
+        };
+
+        // --- Components ---
+
+        const Icon = ({ name, className }) => {
+            useEffect(() => {
+                lucide.createIcons();
+            }, [name]);
+            return <i data-lucide={name} className={className}></i>;
+        };
+
+        const FileRow = ({ fileData, onDownload, onRemove }) => {
+            const statusColor = {
+                queued: 'bg-slate-200 text-slate-500',
+                processing: 'bg-blue-100 text-blue-600',
+                done: 'bg-green-100 text-green-700',
+                error: 'bg-red-100 text-red-600'
+            };
+
+            return (
+                <div className="flex items-center justify-between p-4 bg-white border border-slate-200 rounded-lg shadow-sm hover:shadow-md transition-all mb-3 group">
+                    <div className="flex items-center space-x-4 overflow-hidden">
+                        <div className={`p-2 rounded-full ${statusColor[fileData.status]}`}>
+                            {fileData.status === 'processing' ? (
+                                <Icon name="loader-2" className="w-5 h-5 animate-spin" />
+                            ) : fileData.status === 'done' ? (
+                                <Icon name="file-check" className="w-5 h-5" />
+                            ) : (
+                                <Icon name="file-text" className="w-5 h-5" />
+                            )}
+                        </div>
+                        <div className="flex flex-col min-w-0">
+                            <span className="font-medium text-slate-800 truncate block">{fileData.file.name}</span>
+                            <span className="text-xs text-slate-500">
+                                {(fileData.file.size / 1024 / 1024).toFixed(2)} MB • {fileData.status.toUpperCase()}
+                            </span>
+                        </div>
+                    </div>
+                    
+                    <div className="flex items-center space-x-2">
+                        {fileData.status === 'done' && (
+                            <button 
+                                onClick={() => onDownload(fileData.id)}
+                                className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
+                                title="Download MD"
+                            >
+                                <Icon name="download" className="w-5 h-5" />
+                            </button>
+                        )}
+                        <button 
+                            onClick={() => onRemove(fileData.id)}
+                            className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-md transition-colors"
+                            title="Remove"
+                        >
+                            <Icon name="x" className="w-5 h-5" />
+                        </button>
+                    </div>
+                </div>
+            );
+        };
+
+        const App = () => {
+            const [files, setFiles] = useState([]);
+            const [isDragging, setIsDragging] = useState(false);
+            const [isProcessing, setIsProcessing] = useState(false);
+            const fileInputRef = useRef(null);
+
+            const handleDragOver = (e) => {
+                e.preventDefault();
+                setIsDragging(true);
+            };
+
+            const handleDragLeave = () => {
+                setIsDragging(false);
+            };
+
+            const addFiles = (newFiles) => {
+                const mapped = Array.from(newFiles)
+                    .filter(f => f.type === 'application/pdf')
+                    .map(f => ({
+                        id: Math.random().toString(36).substr(2, 9),
+                        file: f,
+                        status: 'queued',
+                        md: null
+                    }));
+                setFiles(prev => [...prev, ...mapped]);
+            };
+
+            const handleDrop = (e) => {
+                e.preventDefault();
+                setIsDragging(false);
+                addFiles(e.dataTransfer.files);
+            };
+
+            const handleFileInput = (e) => {
+                addFiles(e.target.files);
+                e.target.value = null; // reset
+            };
+
+            const removeFile = (id) => {
+                setFiles(prev => prev.filter(f => f.id !== id));
+            };
+
+            const updateFileStatus = (id, status, md = null) => {
+                setFiles(prev => prev.map(f => 
+                    f.id === id ? { ...f, status, md: md || f.md } : f
+                ));
+            };
+
+            const convertAll = async () => {
+                setIsProcessing(true);
+                const queue = files.filter(f => f.status === 'queued');
+                
+                // Process sequentially to not freeze browser on weak machines
+                for (const item of queue) {
+                    updateFileStatus(item.id, 'processing');
+                    try {
+                        const markdown = await processPDF(item.file);
+                        updateFileStatus(item.id, 'done', markdown);
+                    } catch (err) {
+                        console.error(err);
+                        updateFileStatus(item.id, 'error');
+                    }
+                }
+                setIsProcessing(false);
+            };
+
+            const downloadFile = (id) => {
+                const file = files.find(f => f.id === id);
+                if (!file || !file.md) return;
+
+                const blob = new Blob([file.md], { type: 'text/markdown' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = file.file.name.replace(/\.[^/.]+$/, "") + ".md";
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            };
+
+            const downloadAllZip = async () => {
+                const zip = new JSZip();
+                const processed = files.filter(f => f.status === 'done');
+                
+                if (processed.length === 0) return;
+
+                processed.forEach(f => {
+                    const name = f.file.name.replace(/\.[^/.]+$/, "") + ".md";
+                    zip.file(name, f.md);
+                });
+
+                const content = await zip.generateAsync({ type: "blob" });
+                const url = URL.createObjectURL(content);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = "converted_markdown_files.zip";
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+            };
+
+            const stats = {
+                total: files.length,
+                done: files.filter(f => f.status === 'done').length,
+                queued: files.filter(f => f.status === 'queued').length
+            };
+
+            useEffect(() => {
+                lucide.createIcons();
+            }, [files]); // Re-run icons when list changes
+
+            return (
+                <div className="flex flex-col h-full max-w-5xl mx-auto w-full p-4 md:p-8">
+                    
+                    {/* Header */}
+                    <div className="mb-8 text-center md:text-left">
+                        <h1 className="text-3xl font-bold text-slate-800 mb-2">PDF to Markdown</h1>
+                        <p className="text-slate-500">Bulk convert PDFs to clean, LLM-ready Markdown files.</p>
+                    </div>
+
+                    {/* Main Workspace */}
+                    <div className="flex-1 flex flex-col md:flex-row gap-6 overflow-hidden min-h-0">
+                        
+                        {/* Drop Zone */}
+                        <div 
+                            className={`md:w-1/3 flex-shrink-0 border-2 border-dashed rounded-xl flex flex-col items-center justify-center p-8 transition-all cursor-pointer
+                                ${isDragging ? 'border-blue-500 bg-blue-50' : 'border-slate-300 hover:border-blue-400 hover:bg-slate-50'}`}
+                            onDragOver={handleDragOver}
+                            onDragLeave={handleDragLeave}
+                            onDrop={handleDrop}
+                            onClick={() => fileInputRef.current.click()}
+                        >
+                            <input 
+                                type="file" 
+                                multiple 
+                                accept="application/pdf" 
+                                className="hidden" 
+                                ref={fileInputRef}
+                                onChange={handleFileInput}
+                            />
+                            <div className="bg-blue-100 p-4 rounded-full mb-4 text-blue-600">
+                                <Icon name="upload-cloud" className="w-8 h-8" />
+                            </div>
+                            <h3 className="text-lg font-semibold text-slate-700 mb-1">Upload PDFs</h3>
+                            <p className="text-sm text-slate-500 text-center">Drag & drop files here<br/>or click to browse</p>
+                        </div>
+
+                        {/* File List & Actions */}
+                        <div className="flex-1 flex flex-col min-h-0 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                            
+                            {/* Toolbar */}
+                            <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+                                <div className="text-sm font-medium text-slate-600">
+                                    Queue: {stats.done}/{stats.total}
+                                </div>
+                                <div className="flex space-x-2">
+                                    {stats.queued > 0 && (
+                                        <button 
+                                            onClick={convertAll}
+                                            disabled={isProcessing}
+                                            className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                        >
+                                            {isProcessing ? (
+                                                <><Icon name="loader-2" className="w-4 h-4 animate-spin" /> <span>Processing...</span></>
+                                            ) : (
+                                                <><Icon name="play" className="w-4 h-4" /> <span>Convert All</span></>
+                                            )}
+                                        </button>
+                                    )}
+                                    {stats.done > 0 && (
+                                        <button 
+                                            onClick={downloadAllZip}
+                                            className="flex items-center space-x-2 px-4 py-2 bg-slate-800 text-white rounded-md text-sm font-medium hover:bg-slate-900 transition-colors"
+                                        >
+                                            <Icon name="archive" className="w-4 h-4" />
+                                            <span>Download All (.zip)</span>
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Scrollable List */}
+                            <div className="flex-1 overflow-y-auto p-4 bg-slate-50/50">
+                                {files.length === 0 ? (
+                                    <div className="h-full flex flex-col items-center justify-center text-slate-400">
+                                        <Icon name="files" className="w-12 h-12 mb-3 opacity-20" />
+                                        <p>No files queued</p>
+                                    </div>
+                                ) : (
+                                    files.map(f => (
+                                        <FileRow 
+                                            key={f.id} 
+                                            fileData={f} 
+                                            onDownload={downloadFile} 
+                                            onRemove={removeFile} 
+                                        />
+                                    ))
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <footer className="mt-4 text-center text-xs text-slate-400">
+                        Processed locally in your browser. No data uploaded.
+                    </footer>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
