@@ -5,23 +5,27 @@
 .DESCRIPTION
     Provides centralized logging functionality for all myTech.Today scripts.
     Features:
-    - Centralized logging to %USERPROFILE%\myTech.Today\logs\
-    - Monthly log archiving (current: scriptname.md, archived: scriptname.YYYY-MM.md)
+    - Centralized logging to platform-appropriate directories
+      - Windows: %USERPROFILE%\myTech.Today\logs\
+      - macOS: ~/Library/Logs/myTech.Today/
+      - Linux: ~/.local/share/myTech.Today/logs/
+    - Monthly log archiving (current: scriptname.jsonl, archived: scriptname.YYYY-MM.jsonl)
     - Cyclical logging with 10MB size limit
-    - Markdown table format for structured logging
+    - JSONL (JSON Lines) format for structured logging
     - ASCII-only indicators (no emoji)
     - Console output with color coding
-    - Windows Event Log integration under 'myTech.Today' root folder
+    - Windows Event Log integration under 'myTech.Today' root folder (Windows only)
     - Enhanced Event Viewer messages with structured Problem/Context/Solution format
+    - Cross-platform support (Windows, macOS, Linux)
     - Can be imported from GitHub URL
 
 .NOTES
     Name:           logging.ps1
     Author:         myTech.Today
-    Version:        2.1.0
+    Version:        3.0.0
     DateCreated:    2025-11-09
-    LastModified:   2025-12-02
-    Requires:       PowerShell 5.1 or later
+    LastModified:   2026-02-01
+    Requires:       PowerShell 5.1 or later (Windows), PowerShell 7.0+ (macOS/Linux)
 
     Usage from GitHub:
     $loggingUrl = 'https://raw.githubusercontent.com/mytech-today-now/scripts/refs/heads/main/logging.ps1'
@@ -56,11 +60,201 @@ $script:CentralLogPath   = "$env:USERPROFILE\myTech.Today\logs\"
 $script:MaxLogSizeMB     = 10
 $script:ScriptName       = $null
 $script:ScriptVersion    = $null
+$script:SessionId        = $null  # GUID for tracking log entries in same session
 
 # Windows Event Log integration (best-effort; failures do not block file logging)
 $script:EnableEventLog   = $true
 $script:EventLogName     = 'myTech.Today'  # Root log in Applications and Services Logs
 $script:EventSource      = $null           # Will be set to script name (source within the log)
+
+function ConvertTo-JsonLogEntry {
+    <#
+    .SYNOPSIS
+        Converts log entry parameters to a hashtable for JSONL serialization.
+
+    .DESCRIPTION
+        Creates a structured hashtable containing all log entry fields including
+        timestamp, level, message, script metadata, system metadata, and optional
+        context/solution/component/error information.
+
+    .PARAMETER Message
+        The log message text.
+
+    .PARAMETER Level
+        The log level (INFO, SUCCESS, WARNING, ERROR).
+
+    .PARAMETER Context
+        Optional context information.
+
+    .PARAMETER Solution
+        Optional solution or recommended action.
+
+    .PARAMETER Component
+        Optional component name.
+
+    .PARAMETER ErrorRecord
+        Optional ErrorRecord object for error logging.
+
+    .OUTPUTS
+        System.Collections.Hashtable
+        A hashtable ready for JSON serialization.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Message,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Level,
+
+        [Parameter(Mandatory = $false)]
+        [string]$Context,
+
+        [Parameter(Mandatory = $false)]
+        [string]$Solution,
+
+        [Parameter(Mandatory = $false)]
+        [string]$Component,
+
+        [Parameter(Mandatory = $false)]
+        [System.Management.Automation.ErrorRecord]$ErrorRecord
+    )
+
+    try {
+        # Detect platform
+        $platform = if ($IsWindows -or $PSVersionTable.PSVersion.Major -le 5) {
+            "Windows"
+        } elseif ($IsMacOS) {
+            "macOS"
+        } elseif ($IsLinux) {
+            "Linux"
+        } else {
+            "Unknown"
+        }
+
+        # Get computer name (cross-platform)
+        $computerName = if ($env:COMPUTERNAME) {
+            $env:COMPUTERNAME
+        } elseif ($env:HOSTNAME) {
+            $env:HOSTNAME
+        } else {
+            try { hostname } catch { "Unknown" }
+        }
+
+        # Get username (cross-platform)
+        $userName = if ($env:USERNAME) {
+            $env:USERNAME
+        } elseif ($env:USER) {
+            $env:USER
+        } else {
+            "Unknown"
+        }
+
+        # Build base log entry
+        $logEntry = @{
+            timestamp = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ss.fffffffZ')
+            level = $Level
+            message = $Message
+            script = @{
+                name = $script:ScriptName
+                version = $script:ScriptVersion
+            }
+            system = @{
+                computer = $computerName
+                user = $userName
+                platform = $platform
+                psVersion = $PSVersionTable.PSVersion.ToString()
+            }
+            metadata = @{
+                processId = $PID
+                threadId = [System.Threading.Thread]::CurrentThread.ManagedThreadId
+                sessionId = $script:SessionId
+                logPath = $script:LogPath
+            }
+        }
+
+        # Add optional fields
+        if ($Context) { $logEntry['context'] = $Context }
+        if ($Solution) { $logEntry['solution'] = $Solution }
+        if ($Component) { $logEntry['component'] = $Component }
+
+        # Add error details if present
+        if ($ErrorRecord) {
+            $logEntry['error'] = @{
+                message = $ErrorRecord.Exception.Message
+                type = $ErrorRecord.Exception.GetType().FullName
+                stackTrace = $ErrorRecord.ScriptStackTrace
+            }
+
+            if ($ErrorRecord.Exception.InnerException) {
+                $logEntry['error']['innerException'] = $ErrorRecord.Exception.InnerException.Message
+            }
+
+            if ($ErrorRecord.Exception.HResult) {
+                $logEntry['error']['hResult'] = $ErrorRecord.Exception.HResult
+            }
+        }
+
+        return $logEntry
+    }
+    catch {
+        # Fallback to minimal valid entry if conversion fails
+        return @{
+            timestamp = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ss.fffffffZ')
+            level = $Level
+            message = $Message
+            script = @{ name = "Unknown"; version = "0.0.0" }
+            system = @{ computer = "Unknown"; user = "Unknown"; platform = "Unknown"; psVersion = "Unknown" }
+            metadata = @{ processId = $PID; threadId = 0; sessionId = "unknown"; logPath = "" }
+        }
+    }
+}
+
+function Write-JsonLogEntry {
+    <#
+    .SYNOPSIS
+        Writes a hashtable as a JSONL entry to the log file.
+
+    .DESCRIPTION
+        Converts a hashtable to JSON and appends it as a single line to the log file.
+        Implements fallback handling if JSON serialization fails.
+
+    .PARAMETER LogEntry
+        The hashtable to serialize and write.
+
+    .OUTPUTS
+        None
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [hashtable]$LogEntry
+    )
+
+    try {
+        # Convert to JSON (compressed, single line)
+        $jsonLine = $LogEntry | ConvertTo-Json -Depth 10 -Compress -ErrorAction Stop
+
+        # Append to log file
+        Add-Content -Path $script:LogPath -Value $jsonLine -ErrorAction SilentlyContinue
+    }
+    catch {
+        # Fallback: write a minimal JSON entry
+        try {
+            $fallbackEntry = @{
+                timestamp = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ss.fffffffZ')
+                level = "ERROR"
+                message = "Failed to serialize log entry: $($_.Exception.Message)"
+                script = @{ name = $script:ScriptName; version = $script:ScriptVersion }
+            }
+            $fallbackJson = $fallbackEntry | ConvertTo-Json -Compress -ErrorAction SilentlyContinue
+            Add-Content -Path $script:LogPath -Value $fallbackJson -ErrorAction SilentlyContinue
+        }
+        catch {
+            # Complete failure - silently continue (logging must never break scripts)
+        }
+    }
+}
 
 function Initialize-MyTechTodayEventLog {
     <#
@@ -197,12 +391,35 @@ function Initialize-Log {
         $script:ScriptVersion = $ScriptVersion
         $script:MaxLogSizeMB  = $MaxLogSizeMB
 
+        # Generate session ID (GUID for this script execution)
+        if (-not $script:SessionId) {
+            $script:SessionId = [guid]::NewGuid().ToString()
+        }
+
         # Initialize Windows Event Log integration (best-effort)
         Initialize-MyTechTodayEventLog -ScriptName $ScriptName
 
-        # Determine log directory
+        # Determine log directory (cross-platform)
         if ($LogPath) {
             $script:CentralLogPath = Split-Path $LogPath -Parent
+        } else {
+            # Use platform-appropriate log directory
+            $platform = if ($IsWindows -or $PSVersionTable.PSVersion.Major -le 5) {
+                "Windows"
+            } elseif ($IsMacOS) {
+                "macOS"
+            } elseif ($IsLinux) {
+                "Linux"
+            } else {
+                "Windows"  # Default to Windows
+            }
+
+            $script:CentralLogPath = switch ($platform) {
+                "Windows" { Join-Path $env:USERPROFILE "myTech.Today\logs" }
+                "macOS"   { Join-Path $HOME "Library/Logs/myTech.Today" }
+                "Linux"   { Join-Path $HOME ".local/share/myTech.Today/logs" }
+                default   { Join-Path $env:USERPROFILE "myTech.Today\logs" }
+            }
         }
 
         # Create log directory if it doesn't exist
@@ -210,8 +427,8 @@ function Initialize-Log {
             New-Item -ItemType Directory -Path $script:CentralLogPath -Force | Out-Null
         }
 
-        # Calculate log file name (format: scriptname.md, lowercase)
-        $logFileName = "$($ScriptName.ToLower()).md"
+        # Calculate log file name (format: scriptname.jsonl, lowercase)
+        $logFileName = "$($ScriptName.ToLower()).jsonl"
         $script:LogPath = Join-Path $script:CentralLogPath $logFileName
 
         # Check if log file exists and needs monthly archiving
@@ -222,7 +439,7 @@ function Initialize-Log {
 
             # If the log file is from a previous month, archive it
             if ($logLastWriteMonth -ne $currentMonth) {
-                $archiveName = "$($ScriptName.ToLower()).$logLastWriteMonth.md"
+                $archiveName = "$($ScriptName.ToLower()).$logLastWriteMonth.jsonl"
                 $archivePath = Join-Path $script:CentralLogPath $archiveName
 
                 # Only archive if the archive doesn't already exist
@@ -242,7 +459,7 @@ function Initialize-Log {
                 if ($sizeMB -gt $script:MaxLogSizeMB) {
                     # Archive the log with timestamp
                     $timestamp = Get-Date -Format 'yyyyMMdd_HHmmss'
-                    $archiveName = "$($ScriptName.ToLower())_archived_$timestamp.md"
+                    $archiveName = "$($ScriptName.ToLower())_archived_$timestamp.jsonl"
                     $archivePath = Join-Path $script:CentralLogPath $archiveName
 
                     Move-Item -Path $script:LogPath -Destination $archivePath -Force -ErrorAction SilentlyContinue
@@ -252,24 +469,10 @@ function Initialize-Log {
             }
         }
 
-        # Create log file with markdown header if it doesn't exist
+        # Create empty JSONL log file if it doesn't exist
         if (-not (Test-Path $script:LogPath)) {
-            $logHeader = @"
-# $ScriptName Log
-
-**Script Version:** $ScriptVersion
-**Log Started:** $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
-**Computer:** $env:COMPUTERNAME
-**User:** $env:USERNAME
-
----
-
-## Activity Log
-
-| Timestamp | Level | Message |
-|-----------|-------|---------|
-"@
-            Set-Content -Path $script:LogPath -Value $logHeader -Force -ErrorAction Stop
+            # JSONL files don't need headers - just create empty file
+            New-Item -Path $script:LogPath -ItemType File -Force -ErrorAction Stop | Out-Null
         }
 
         Write-Host "[INFO] Logging initialized: $script:LogPath" -ForegroundColor Cyan
@@ -480,7 +683,7 @@ function Write-Log {
     # Check log rotation before writing
     Test-LogRotation
 
-    # Format timestamp
+    # Format timestamp for console
     $timestamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
 
     # Map level to ASCII indicator and color
@@ -496,10 +699,14 @@ function Write-Log {
     # Write to console with color
     Write-Host "[$timestamp] $($config.Indicator) $Message" -ForegroundColor $config.Color
 
-    # Write to file in markdown table format
+    # Write to file in JSONL format
     try {
-        $logEntry = "| $timestamp | $($config.Indicator) | $Message |"
-        Add-Content -Path $script:LogPath -Value $logEntry -ErrorAction SilentlyContinue
+        # Convert to structured log entry
+        $logEntryHash = ConvertTo-JsonLogEntry -Message $Message -Level $Level `
+            -Context $Context -Solution $Solution -Component $Component
+
+        # Write as JSONL
+        Write-JsonLogEntry -LogEntry $logEntryHash
     }
     catch {
         # Silently continue if file logging fails
@@ -584,7 +791,7 @@ function Test-LogRotation {
 
         # Check if month has changed - archive to previous month's file
         if ($logLastWriteMonth -ne $currentMonth) {
-            $archiveName = "$($script:ScriptName.ToLower()).$logLastWriteMonth.md"
+            $archiveName = "$($script:ScriptName.ToLower()).$logLastWriteMonth.jsonl"
             $archivePath = Join-Path $script:CentralLogPath $archiveName
 
             # Only archive if the archive doesn't already exist
@@ -597,24 +804,8 @@ function Test-LogRotation {
                 Remove-Item -Path $script:LogPath -Force -ErrorAction SilentlyContinue
             }
 
-            # Create new log file with header
-            $logHeader = @"
-# $($script:ScriptName) Log
-
-**Script Version:** $($script:ScriptVersion)
-**Log Started:** $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
-**Computer:** $env:COMPUTERNAME
-**User:** $env:USERNAME
-**Note:** Previous month's log archived to $archiveName
-
----
-
-## Activity Log
-
-| Timestamp | Level | Message |
-|-----------|-------|---------|
-"@
-            Set-Content -Path $script:LogPath -Value $logHeader -Force -ErrorAction SilentlyContinue
+            # Create new empty JSONL file
+            New-Item -Path $script:LogPath -ItemType File -Force -ErrorAction SilentlyContinue | Out-Null
         }
         else {
             # Same month - check size-based rotation
@@ -623,29 +814,13 @@ function Test-LogRotation {
             if ($sizeMB -gt $script:MaxLogSizeMB) {
                 # Archive the log with timestamp
                 $timestamp = Get-Date -Format 'yyyyMMdd_HHmmss'
-                $archiveName = "$($script:ScriptName.ToLower())_archived_$timestamp.md"
+                $archiveName = "$($script:ScriptName.ToLower())_archived_$timestamp.jsonl"
                 $archivePath = Join-Path $script:CentralLogPath $archiveName
 
                 Move-Item -Path $script:LogPath -Destination $archivePath -Force -ErrorAction SilentlyContinue
 
-                # Create new log file with header
-                $logHeader = @"
-# $($script:ScriptName) Log
-
-**Script Version:** $($script:ScriptVersion)
-**Log Started:** $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
-**Computer:** $env:COMPUTERNAME
-**User:** $env:USERNAME
-**Note:** Previous log archived to $archiveName (size limit exceeded)
-
----
-
-## Activity Log
-
-| Timestamp | Level | Message |
-|-----------|-------|---------|
-"@
-                Set-Content -Path $script:LogPath -Value $logHeader -Force -ErrorAction SilentlyContinue
+                # Create new empty JSONL file
+                New-Item -Path $script:LogPath -ItemType File -Force -ErrorAction SilentlyContinue | Out-Null
 
                 Write-Host "[INFO] Log file size limit exceeded. Archived to: $archivePath" -ForegroundColor Cyan
             }
