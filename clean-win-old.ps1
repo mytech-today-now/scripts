@@ -15,13 +15,20 @@
 
 .NOTES
     Author : myTech.Today
-    Version: 1.2.0
+    Version: 1.3.0
     Requires: Administrator privileges
+
+    Changelog v1.3.0:
+    - Fixed progress bar exceeding 100% during ownership phase
+    - Phase 1 now uses indeterminate counter (no misleading percentage)
+    - Re-scans after ownership to get accurate file/dir counts for Phases 2-3
+    - Fixed in-place line update for VS Code integrated terminal
+
+    Changelog v1.2.1:
+    - Use Console cursor positioning for in-place progress
 
     Changelog v1.2.0:
     - CLI progress UI with sticky header and live status line
-    - Shows folder size, file/directory counts, elapsed time, phase progress
-    - Errors are collected and summarised at the end
 
     Changelog v1.1.0:
     - Hard-coded path validated via GetFullPath()
@@ -90,14 +97,14 @@ function Write-Phase {
 
 function Write-Status {
     param([string]$Text, [int]$Current, [int]$Total)
-    # Throttle updates to every 250ms to avoid flicker
+    # Throttle updates to every 300ms to avoid flicker
     $now = [datetime]::UtcNow
-    if (($now - $script:lastUpdate).TotalMilliseconds -lt 250) { return }
+    if (($now - $script:lastUpdate).TotalMilliseconds -lt 300) { return }
     $script:lastUpdate = $now
 
     $elapsed = $script:startTime.Elapsed.ToString('mm\:ss')
-    $pct     = if ($Total -gt 0) { [math]::Floor(($Current / $Total) * 100) } else { 0 }
-    $barFill = [math]::Floor($pct / 2.5)   # 40-char max bar
+    $pct     = if ($Total -gt 0) { [math]::Min(100, [math]::Floor(($Current / $Total) * 100)) } else { 0 }
+    $barFill = [math]::Min(40, [math]::Floor($pct / 2.5))   # 40-char max bar
     $bar     = ([string]::new([char]0x2588, $barFill)).PadRight(40)
 
     $width   = try { [Console]::WindowWidth } catch { 120 }
@@ -106,19 +113,37 @@ function Write-Status {
     if ($Text.Length -gt $remain) { $Text = $Text.Substring(0, [math]::Max(0, $remain - 3)) + '...' }
     $line    = ($prefix + $Text).PadRight($width - 1)
 
-    # Move cursor to column 0 on current line and overwrite
-    [Console]::CursorLeft = 0
-    [Console]::Write($line)
+    # Use Write-Host with carriage return for broadest terminal compatibility
+    Write-Host ("`r" + $line) -NoNewline
+}
+
+function Write-StatusIndeterminate {
+    param([string]$Text, [int]$Current)
+    # Throttle updates to every 300ms
+    $now = [datetime]::UtcNow
+    if (($now - $script:lastUpdate).TotalMilliseconds -lt 300) { return }
+    $script:lastUpdate = $now
+
+    $elapsed = $script:startTime.Elapsed.ToString('mm\:ss')
+    # Spinner animation instead of percentage bar
+    $spinChars = @('|', '/', '-', '\')
+    $spin = $spinChars[$Current % 4]
+
+    $width   = try { [Console]::WindowWidth } catch { 120 }
+    $prefix  = "  [$spin] {0:N0} items  [{1}]  " -f $Current, $elapsed
+    $remain  = [math]::Max(0, $width - $prefix.Length - 1)
+    if ($Text.Length -gt $remain) { $Text = $Text.Substring(0, [math]::Max(0, $remain - 3)) + '...' }
+    $line    = ($prefix + $Text).PadRight($width - 1)
+
+    Write-Host ("`r" + $line) -NoNewline
 }
 
 function Write-PhaseDone {
     param([string]$Message)
     $width = try { [Console]::WindowWidth } catch { 120 }
     # Overwrite the status line with the success message
-    [Console]::CursorLeft = 0
-    [Console]::Write((' ' * ($width - 1)))
-    [Console]::CursorLeft = 0
-    Write-Host "  [OK] $Message" -ForegroundColor Green
+    Write-Host ("`r" + (' ' * ($width - 1))) -NoNewline
+    Write-Host "`r  [OK] $Message" -ForegroundColor Green
 }
 
 # ---------------------------------------------------------------------------
@@ -138,18 +163,28 @@ Write-Header -SizeText (Format-Size $totalSize) -FileCount $allFiles.Count -DirC
 # ---------------------------------------------------------------------------
 Write-Phase 'Phase 1/3 — Taking ownership & setting permissions'
 
-# Stream takeown output for live progress
+# Stream takeown output with indeterminate spinner (count is unknown because
+# Get-ChildItem can't see items it doesn't have permission to enumerate)
 $tkCount = 0
 & takeown /F $folder /R /A /D Y 2>&1 | ForEach-Object {
     $tkCount++
     if ($tkCount % 50 -eq 0) {
-        Write-Status -Text "$_" -Current $tkCount -Total ($allFiles.Count + $allDirs.Count)
+        Write-StatusIndeterminate -Text "$_" -Current $tkCount
     }
 }
-Write-PhaseDone "Ownership taken ($tkCount items)"
+Write-PhaseDone "Ownership taken ($($tkCount.ToString('N0')) items)"
 
 & icacls $folder /grant Administrators:F /T /C /Q 2>&1 | Out-Null
 Write-PhaseDone 'ACLs updated'
+
+# ---------------------------------------------------------------------------
+# Re-scan after ownership: now we can see everything
+# ---------------------------------------------------------------------------
+Write-Host '  Rescanning...' -NoNewline -ForegroundColor DarkGray
+$allFiles = @(Get-ChildItem -LiteralPath $folder -Recurse -File -Force -ErrorAction SilentlyContinue)
+$allDirs  = @(Get-ChildItem -LiteralPath $folder -Recurse -Directory -Force -ErrorAction SilentlyContinue)
+Write-Host ("`r" + (' ' * 40) + "`r") -NoNewline
+Write-Host "  [OK] Rescan: $($allFiles.Count.ToString('N0')) files, $($allDirs.Count.ToString('N0')) dirs" -ForegroundColor Green
 
 # ---------------------------------------------------------------------------
 # Phase 2: Delete files (bottom-up)
