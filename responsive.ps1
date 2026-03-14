@@ -1321,11 +1321,19 @@ function New-ResponsiveLinkLabel {
     $linkLabel.ActiveLinkColor = [System.Drawing.Color]::FromArgb(0, 51, 153)
     $linkLabel.VisitedLinkColor = [System.Drawing.Color]::FromArgb(128, 0, 128)
 
-    # Add click handler to open URL
+    # Store the URL in Tag so it's accessible from the event handler
+    # (closure over $LinkUrl doesn't survive scriptblock serialization in WinForms events)
+    $linkLabel.Tag = $LinkUrl
+
+    # Add click handler to open URL using $sender.Tag
     $linkLabel.Add_LinkClicked({
         param($sender, $e)
         try {
-            Start-Process $LinkUrl
+            $url = $sender.Tag
+            if ([string]::IsNullOrWhiteSpace($url)) {
+                throw "Link URL is not set."
+            }
+            Start-Process $url
         }
         catch {
             [System.Windows.Forms.MessageBox]::Show(
