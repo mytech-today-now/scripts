@@ -90,32 +90,35 @@ function Write-Phase {
 
 function Write-Status {
     param([string]$Text, [int]$Current, [int]$Total)
-    # Throttle updates to every 150ms to avoid flicker
+    # Throttle updates to every 250ms to avoid flicker
     $now = [datetime]::UtcNow
-    if (($now - $script:lastUpdate).TotalMilliseconds -lt 150) { return }
+    if (($now - $script:lastUpdate).TotalMilliseconds -lt 250) { return }
     $script:lastUpdate = $now
 
     $elapsed = $script:startTime.Elapsed.ToString('mm\:ss')
     $pct     = if ($Total -gt 0) { [math]::Floor(($Current / $Total) * 100) } else { 0 }
-    $bar     = [string]::new([char]0x2588, [math]::Floor($pct / 2.5))  # 40-char max bar
-    $pad     = 40 - $bar.Length
+    $barFill = [math]::Floor($pct / 2.5)   # 40-char max bar
+    $bar     = ([string]::new([char]0x2588, $barFill)).PadRight(40)
 
-    # Truncate status text so it fits on one line
-    $maxLen  = [math]::Max(0, [Console]::WindowWidth - 20)
-    if ($Text.Length -gt $maxLen) { $Text = $Text.Substring(0, $maxLen - 3) + '...' }
+    $width   = try { [Console]::WindowWidth } catch { 120 }
+    $prefix  = "  [$bar] {0,3}%  {1}/{2}  [{3}]  " -f $pct, $Current, $Total, $elapsed
+    $remain  = [math]::Max(0, $width - $prefix.Length - 1)
+    if ($Text.Length -gt $remain) { $Text = $Text.Substring(0, [math]::Max(0, $remain - 3)) + '...' }
+    $line    = ($prefix + $Text).PadRight($width - 1)
 
-    $line = "  [{0}{1}] {2,3}%  {3}/{4}  [{5}]  {6}" -f `
-        $bar, (' ' * $pad), $pct, $Current, $Total, $elapsed, $Text
-
-    Write-Host "`r$line" -NoNewline -ForegroundColor DarkGray
+    # Move cursor to column 0 on current line and overwrite
+    [Console]::CursorLeft = 0
+    [Console]::Write($line)
 }
 
 function Write-PhaseDone {
     param([string]$Message)
-    # Clear the status line
-    $blank = ' ' * ([math]::Min([Console]::WindowWidth, 120))
-    Write-Host "`r$blank" -NoNewline
-    Write-Host "`r  [OK] $Message" -ForegroundColor Green
+    $width = try { [Console]::WindowWidth } catch { 120 }
+    # Overwrite the status line with the success message
+    [Console]::CursorLeft = 0
+    [Console]::Write((' ' * ($width - 1)))
+    [Console]::CursorLeft = 0
+    Write-Host "  [OK] $Message" -ForegroundColor Green
 }
 
 # ---------------------------------------------------------------------------
