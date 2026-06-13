@@ -81,7 +81,7 @@ function ConvertTo-JsonLogEntry {
         The log message text.
 
     .PARAMETER Level
-        The log level (INFO, SUCCESS, WARNING, ERROR).
+        The log level (DEBUG, INFO, SUCCESS, WARNING, ERROR).
 
     .PARAMETER Context
         Optional context information.
@@ -498,7 +498,7 @@ function Build-EnhancedEventMessage {
         The primary message describing what happened.
 
     .PARAMETER Level
-        The log level (INFO, SUCCESS, WARNING, ERROR).
+        The log level (DEBUG, INFO, SUCCESS, WARNING, ERROR).
 
     .PARAMETER Indicator
         The display indicator for the level (e.g., [WARN], [ERROR]).
@@ -573,6 +573,7 @@ function Build-EnhancedEventMessage {
         'ERROR'   { "ERROR DESCRIPTION" }
         'WARNING' { "WARNING DESCRIPTION" }
         'SUCCESS' { "SUCCESS DETAILS" }
+        'DEBUG'   { "DEBUG INFORMATION" }
         default   { "INFORMATION" }
     }
 
@@ -594,6 +595,7 @@ function Build-EnhancedEventMessage {
         $solutionHeader = switch ($Level) {
             'ERROR'   { "RECOMMENDED ACTION" }
             'WARNING' { "SUGGESTED ACTION" }
+            'DEBUG'   { "ADDITIONAL NOTES" }
             default   { "NOTES" }
         }
         [void]$sb.AppendLine($solutionHeader)
@@ -628,7 +630,7 @@ function Write-Log {
         The message to log.
 
     .PARAMETER Level
-        The log level: INFO, SUCCESS, WARNING, or ERROR. Default is INFO.
+        The log level: DEBUG, INFO, SUCCESS, WARNING, or ERROR. Default is INFO.
 
     .PARAMETER Solution
         Optional. Recommended action or solution for warnings/errors.
@@ -661,7 +663,7 @@ function Write-Log {
         [string]$Message,
 
         [Parameter(Mandatory = $false)]
-        [ValidateSet('INFO', 'SUCCESS', 'WARNING', 'ERROR')]
+        [ValidateSet('DEBUG', 'INFO', 'SUCCESS', 'WARNING', 'ERROR')]
         [string]$Level = 'INFO',
 
         [Parameter(Mandatory = $false)]
@@ -688,6 +690,7 @@ function Write-Log {
 
     # Map level to ASCII indicator and color
     $levelConfig = @{
+        'DEBUG'   = @{ Indicator = '[DBG]';  Color = 'Gray' }
         'INFO'    = @{ Indicator = '[INFO]';  Color = 'Cyan' }
         'SUCCESS' = @{ Indicator = '[OK]';    Color = 'Green' }
         'WARNING' = @{ Indicator = '[WARN]';  Color = 'Yellow' }
@@ -718,6 +721,7 @@ function Write-Log {
             $entryType = switch ($Level) {
                 'SUCCESS' { [System.Diagnostics.EventLogEntryType]::Information }
                 'INFO'    { [System.Diagnostics.EventLogEntryType]::Information }
+                'DEBUG'   { [System.Diagnostics.EventLogEntryType]::Information }
                 'WARNING' { [System.Diagnostics.EventLogEntryType]::Warning }
                 'ERROR'   { [System.Diagnostics.EventLogEntryType]::Error }
                 default   { [System.Diagnostics.EventLogEntryType]::Information }
@@ -726,6 +730,7 @@ function Write-Log {
             $eventId = switch ($Level) {
                 'SUCCESS' { 1001 }
                 'INFO'    { 1000 }
+                'DEBUG'   { 1000 }
                 'WARNING' { 2000 }
                 'ERROR'   { 3000 }
                 default   { 1000 }
